@@ -1,6 +1,6 @@
 {
   "name": "captagov",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,6 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "dexie": "^3.2.7",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2",
     "next": "14.2.35",
     "react": "18.3.1",
     "react-dom": "18.3.1"

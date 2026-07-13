@@ -1,82 +1,51 @@
-# CaptaGov — versão híbrida (Next.js + IndexedDB)
+# CaptaGov v2
 
-Este projeto é o mesmo protótipo CaptaGov, só que reestruturado para
-subir no GitHub/Vercel como um app Next.js (React), mantendo os dados
-100% no navegador do usuário — sem servidor de banco de dados.
+Plataforma de gestão de convênios e projetos para a administração pública municipal, com interface moderna, dados 100% locais (IndexedDB) e exportação em PDF.
 
-## O que mudou em relação ao arquivo único original
+**CaptaGov — Conectando projetos a recursos. Transformando municípios.**
 
-- **Código**: virou um projeto Next.js normal (`pages/`, `styles/`, `public/`).
-  A lógica de interface (o script gigante que já existia) foi mantida quase
-  intacta em `public/app.js` — só a parte de **persistência** foi trocada.
-- **Dados**: antes ficavam em `localStorage` (limite prático de 5–10MB, por
-  isso os anexos grandes já estavam dando erro). Agora ficam em
-  **IndexedDB** (via [Dexie.js](https://dexie.org)), cujo limite é uma
-  fatia do espaço livre em disco — na prática, gigabytes.
-- **Migração automática**: se o usuário já tinha dados salvos no
-  `localStorage` (formato antigo `captagov_v1` ou `captagov_v2`), o app
-  migra tudo para o IndexedDB automaticamente no primeiro carregamento.
+## Recursos
 
-## Estrutura
-
-```
-captagov/
-├── pages/
-│   ├── _app.js       # carrega Dexie + public/app.js na ordem certa
-│   ├── _document.js  # fontes (Google Fonts)
-│   └── index.js      # monta o markup original da tela
-├── lib/
-│   ├── body.html     # o HTML original (sidebar, abas, formulários…)
-│   └── bodyHtml.js    # lê body.html no servidor
-├── public/
-│   └── app.js         # toda a lógica original, com salvarEstado/
-│                       # carregarEstado agora usando IndexedDB
-└── styles/
-    └── globals.css    # todo o CSS original, sem alterações
-```
+- Painel geral com indicadores em tempo real
+- Cadastro completo de convênios e projetos (aba dedicada)
+- Controle financeiro (extratos, rendimentos, pagamentos)
+- Prestação de contas com checklist documental
+- Relatórios financeiros em PDF profissional
+- Módulo de emendas parlamentares
+- Geração de justificativa técnica offline
+- Backup e importação de dados (JSON)
 
 ## Rodando localmente
 
-```bash
+```shell
 npm install
 npm run dev
 ```
 
-Abra http://localhost:3000
-
-## Subindo pro GitHub
-
-```bash
-git init
-git add .
-git commit -m "CaptaGov: versão híbrida com IndexedDB"
-git branch -M main
-git remote add origin <URL_DO_SEU_REPOSITORIO>
-git push -u origin main
-```
+Acesse [http://localhost:3000](http://localhost:3000)
 
 ## Deploy na Vercel
 
-1. Entre em https://vercel.com/new
-2. Importe o repositório que você acabou de subir
-3. A Vercel detecta automaticamente que é um projeto Next.js — não precisa
-   configurar nada, é só clicar em "Deploy"
-4. Pronto: cada `git push` na branch principal gera um novo deploy
+1. Importe o repositório em [vercel.com/new](https://vercel.com/new)
+2. A Vercel detecta automaticamente o projeto Next.js
+3. Clique em "Deploy"
 
-## Importante: o que isso resolve e o que não resolve
+## Tecnologias
 
-✅ Resolve o limite de espaço (localStorage → IndexedDB)
-✅ Resolve o código estar organizado como projeto React, pronto pra evoluir
-✅ Continua funcionando sem internet / sem custo de servidor
+| Tecnologia | Versão | Uso |
+| :--- | :--- | :--- |
+| Next.js | 14.2 | Framework React |
+| React | 18.3 | Interface |
+| Dexie.js | 3.2 | IndexedDB (dados locais) |
+| jsPDF | 2.5 | Relatórios em PDF |
+| jsPDF-autoTable | 3.8 | Tabelas no PDF |
 
-❌ **Não sincroniza entre dispositivos.** Os dados continuam presos ao
-navegador/computador onde foram criados. Se o usuário limpar os dados do
-site ou trocar de máquina, ainda é preciso usar exportar/importar. Isso só
-se resolve com um backend de verdade (ex.: Supabase) — o que dá pra plugar
-depois, sem reescrever a interface, só trocando a "gaveta" de novo.
+## Dados
 
-## Próximo passo natural (quando fizer sentido)
+Todos os dados são armazenados no **IndexedDB** do navegador do usuário (sem servidor). Use a função **Exportar Backup** na sidebar para gerar um arquivo `.json` com todos os dados, e **Importar Backup** para restaurar.
 
-Trocar `public/app.js`'s IndexedDB por chamadas a uma API (ex.: Supabase),
-mantendo a mesma interface. Como o front já está em React/Next.js, essa
-troca não exige reescrever as telas.
+## Próximos passos
+
+- Integração com IA real (Anthropic Claude) para geração de documentos
+- Backend opcional (Supabase) para sincronização em nuvem
+- PWA para instalação como app
