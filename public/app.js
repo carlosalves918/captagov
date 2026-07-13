@@ -448,7 +448,7 @@ function adicionarContratada() {
   renderFinanceiro();
 }
 
-function registrarPagamento() {
+async function registrarPagamento() {
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -463,42 +463,213 @@ function registrarPagamento() {
   const contratadaId = document.getElementById('pg_contratada')?.value || '';
   if (!contratadaId) { alert('Selecione a contratada.'); return; }
 
+  const anexos = [];
+  const fileInput = document.getElementById('pg_anexo');
+  if (fileInput && fileInput.files && fileInput.files.length > 0) {
+    for (let i = 0; i < fileInput.files.length; i++) {
+      const file = fileInput.files[i];
+      anexos.push({ nome: file.name, type: file.type, dataUrl: null });
+      await lerArquivoComoDataUrl(file).then(dataUrl => {
+        anexos[anexos.length - 1].dataUrl = dataUrl;
+      });
+    }
+  }
+
   c.financeiro.pagamentos.push({
     id: gerarId('pg'), numero: c.financeiro.pagamentos.length + 1,
     contratadaId, valor, data: document.getElementById('pg_data')?.value || '',
     status: 'pendente',
     docs: {},
+    anexos: anexos,
+    obs: document.getElementById('pg_obs')?.value || '',
   });
   salvarEstado();
   renderFinanceiro();
 }
 
-function lancarExtrato() {
+// ==================== PAGAMENTOS - ANEXOS ====================
+function togglePagamentoStatus(id) {
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
+  const pg = (c.financeiro.pagamentos || []).find(p => p.id === id);
+  if (!pg) return;
+  pg.status = pg.status === 'pendente' ? 'fechado' : 'pendente';
+  salvarEstado();
+  renderFinanceiro();
+}
+
+function togglePagamentoAnexos(pagamentoId) {
+  const container = document.getElementById('pagamentoAnexosContainer');
+  if (!container) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
+  if (!pg) return;
+  const anexos = pg.anexos || [];
+  if (anexos.length === 0) {
+    container.innerHTML = '<div style="padding:12px 16px;color:var(--gray-500);">Nenhum anexo neste pagamento.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div style="margin-top:12px;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
+      <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;font-weight:600;">Anexos — Pagamento nº ${pg.numero}</div>
+      ${anexos.map(a => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);">
+          <div style="font-size:13px;color:var(--gray-700);">📎 ${escapeHtml(a.nome)} <span style="color:var(--gray-400);font-size:12px;">${escapeHtml(a.type || '')}</span></div>
+          <div style="display:flex;gap:6px;">
+            ${a.dataUrl ? `<a href="${a.dataUrl}" download="${escapeHtml(a.nome)}" class="btn btn-ghost btn-sm">⬇ Baixar</a>` : ''}
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerAnexoPagamento('${pg.id}','${escapeHtml(a.nome)}')">✕</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function removerAnexoPagamento(pagamentoId, nome) {
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
+  if (!pg || !pg.anexos) return;
+  pg.anexos = pg.anexos.filter(a => a.nome !== nome);
+  salvarEstado();
+  renderFinanceiro();
+}
+
+// ==================== EXTRATOS ====================
+function lerArquivoComoDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+// ==================== EXTRATOS ====================
+async function lancarExtrato() {
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const anexos = [];
+  const fileInput = document.getElementById('ex_anexo');
+  if (fileInput && fileInput.files && fileInput.files.length > 0) {
+    for (let i = 0; i < fileInput.files.length; i++) {
+      const file = fileInput.files[i];
+      anexos.push({ nome: file.name, type: file.type, dataUrl: null });
+      await lerArquivoComoDataUrl(file).then(dataUrl => { anexos[anexos.length - 1].dataUrl = dataUrl; });
+    }
+  }
   c.financeiro.extratos.push({
     id: gerarId('ex'),
     mes: document.getElementById('ex_mes')?.value || '',
     entradas: parseMoeda(document.getElementById('ex_entradas')?.value || '0'),
     saidas: parseMoeda(document.getElementById('ex_saidas')?.value || '0'),
     obs: document.getElementById('ex_obs')?.value || '',
+    anexos: anexos,
   });
   salvarEstado();
   renderFinanceiro();
 }
 
-function lancarRendimento() {
+async function lancarRendimento() {
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
+  const anexos = [];
+  const fileInput = document.getElementById('rd_anexo');
+  if (fileInput && fileInput.files && fileInput.files.length > 0) {
+    for (let i = 0; i < fileInput.files.length; i++) {
+      const file = fileInput.files[i];
+      anexos.push({ nome: file.name, type: file.type, dataUrl: null });
+      await lerArquivoComoDataUrl(file).then(dataUrl => { anexos[anexos.length - 1].dataUrl = dataUrl; });
+    }
+  }
   c.financeiro.rendimentos.push({
     id: gerarId('rd'),
     mes: document.getElementById('rd_mes')?.value || '',
     aplicado: parseMoeda(document.getElementById('rd_aplicado')?.value || '0'),
     rendimento: parseMoeda(document.getElementById('rd_rendimento')?.value || '0'),
     obs: document.getElementById('rd_obs')?.value || '',
+    anexos: anexos,
   });
+  salvarEstado();
+  renderFinanceiro();
+}
+
+// ==================== EXTRATOS - ANEXOS ====================
+function toggleExtratoAnexos(extratoId) {
+  const container = document.getElementById('extratoAnexosContainer');
+  if (!container) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const ex = (c.financeiro.extratos || []).find(e => e.id === extratoId);
+  if (!ex) return;
+  const anexos = ex.anexos || [];
+  if (anexos.length === 0) {
+    container.innerHTML = '<div style="padding:12px 16px;color:var(--gray-500);">Nenhum anexo neste extrato.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div style="margin-top:12px;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
+      <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;font-weight:600;">Anexos — Extrato ${formatMes(ex.mes)}</div>
+      ${anexos.map(a => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);">
+          <div style="font-size:13px;color:var(--gray-700);">📎 ${escapeHtml(a.nome)}</div>
+          <div style="display:flex;gap:6px;">
+            ${a.dataUrl ? `<a href="${a.dataUrl}" download="${escapeHtml(a.nome)}" class="btn btn-ghost btn-sm">⬇ Baixar</a>` : ''}
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerAnexoExtrato('${ex.id}','${escapeHtml(a.nome)}')">✕</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function removerAnexoExtrato(extratoId, nome) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const ex = (c.financeiro.extratos || []).find(e => e.id === extratoId);
+  if (!ex || !ex.anexos) return;
+  ex.anexos = ex.anexos.filter(a => a.nome !== nome);
+  salvarEstado();
+  renderFinanceiro();
+}
+
+// ==================== RENDIMENTOS - ANEXOS ====================
+function toggleRendimentoAnexos(rendimentoId) {
+  const container = document.getElementById('rendimentoAnexosContainer');
+  if (!container) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const rd = (c.financeiro.rendimentos || []).find(r => r.id === rendimentoId);
+  if (!rd) return;
+  const anexos = rd.anexos || [];
+  if (anexos.length === 0) {
+    container.innerHTML = '<div style="padding:12px 16px;color:var(--gray-500);">Nenhum anexo neste rendimento.</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div style="margin-top:12px;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
+      <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;font-weight:600;">Anexos — Rendimento ${formatMes(rd.mes)}</div>
+      ${anexos.map(a => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);">
+          <div style="font-size:13px;color:var(--gray-700);">📎 ${escapeHtml(a.nome)}</div>
+          <div style="display:flex;gap:6px;">
+            ${a.dataUrl ? `<a href="${a.dataUrl}" download="${escapeHtml(a.nome)}" class="btn btn-ghost btn-sm">⬇ Baixar</a>` : ''}
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerAnexoRendimento('${rd.id}','${escapeHtml(a.nome)}')">✕</button>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+function removerAnexoRendimento(rendimentoId, nome) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const rd = (c.financeiro.rendimentos || []).find(r => r.id === rendimentoId);
+  if (!rd || !rd.anexos) return;
+  rd.anexos = rd.anexos.filter(a => a.nome !== nome);
   salvarEstado();
   renderFinanceiro();
 }
@@ -614,6 +785,80 @@ function exportarDados() {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+// ==================== EXPORTAR ANEXOS EM ZIP ====================
+async function exportarAnexosZIP() {
+  if (!STATE.convenioAtualId) { alert('Selecione um convênio.'); return; }
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+
+  if (typeof JSZip === 'undefined') { alert('Biblioteca JSZip não carregada. Recarregue a página.'); return; }
+
+  const zip = new JSZip();
+  const pastaBase = zip.folder('anexos-' + (c.numero || 'convenio'));
+  const pastaPagamentos = pastaBase.folder('pagamentos');
+  const pastaExtratos = pastaBase.folder('extratos');
+  const pastaRendimentos = pastaBase.folder('rendimentos');
+  const pastaDocumentos = pastaBase.folder('documentos');
+
+  let count = 0;
+
+  // Anexos de pagamentos
+  (c.financeiro.pagamentos || []).forEach(pg => {
+    (pg.anexos || []).forEach(a => {
+      if (a.dataUrl) {
+        const base64 = a.dataUrl.split(',')[1];
+        pastaPagamentos.file(`pag${pg.numero}_${a.nome}`, base64, { base64: true });
+        count++;
+      }
+    });
+  });
+
+  // Anexos de extratos
+  (c.financeiro.extratos || []).forEach(ex => {
+    (ex.anexos || []).forEach(a => {
+      if (a.dataUrl) {
+        const base64 = a.dataUrl.split(',')[1];
+        pastaExtratos.file(`${ex.mes}_${a.nome}`, base64, { base64: true });
+        count++;
+      }
+    });
+  });
+
+  // Anexos de rendimentos
+  (c.financeiro.rendimentos || []).forEach(rd => {
+    (rd.anexos || []).forEach(a => {
+      if (a.dataUrl) {
+        const base64 = a.dataUrl.split(',')[1];
+        pastaRendimentos.file(`${rd.mes}_${a.nome}`, base64, { base64: true });
+        count++;
+      }
+    });
+  });
+
+  // Documentos extras
+  (c.documentosExtras || []).forEach(doc => {
+    if (doc.arquivoDataUrl) {
+      const base64 = doc.arquivoDataUrl.split(',')[1];
+      pastaDocumentos.file(doc.arquivo || doc.nome, base64, { base64: true });
+      count++;
+    }
+  });
+
+  if (count === 0) { alert('Nenhum anexo encontrado para exportar.'); return; }
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'anexos-' + (c.numero || 'convenio') + '.zip';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  alert(`${count} arquivo(s) exportados com sucesso!`);
+}
+
+// ==================== IMPORTAR DADOS ====================
 function importarDados(file) {
   if (!file) return;
   const reader = new FileReader();
@@ -659,8 +904,7 @@ function renderSidebar() {
   el.innerHTML = `
     <div class="sidebar-header">
       <div class="sidebar-logo">
-        <div class="sidebar-logo-icon">C</div>
-        <div class="sidebar-logo-text">Capta<span>Gov</span></div>
+        <img src="/logo.png" alt="CaptaGov" class="sidebar-logo-img" />
       </div>
     </div>
     <nav class="sidebar-nav">
@@ -673,13 +917,14 @@ function renderSidebar() {
     </nav>
     <div class="sidebar-footer">
       <div style="margin-bottom:8px;">
-        <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarDados()">⬇ Exportar Backup</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarDados()">⬇ Exportar Backup (JSON)</button>
+        <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarAnexosZIP()">📦 Exportar Anexos (ZIP)</button>
         <label class="btn btn-secondary btn-sm" style="width:100%;display:block;text-align:center;">
           ⬆ Importar Backup
           <input type="file" accept=".json" style="display:none" onchange="importarDados(this.files[0])" />
         </label>
       </div>
-      <div>CaptaGov v2.0 — Dados locais</div>
+      <div>CaptaGov v2.1 — Dados locais</div>
     </div>
   `;
 }
@@ -1041,6 +1286,11 @@ function renderSubPrestacaoContas(c, resumo) {
   }
 }
 
+// Alias para compatibilidade (chamado por registrarPagamento, lancarExtrato, etc.)
+function renderFinanceiro() {
+  renderTudo();
+}
+
 function renderContratadas(c) {
   const fin = c.financeiro;
   return `
@@ -1093,28 +1343,42 @@ function renderPagamentos(c, resumo) {
         <div class="form-group"><label class="form-label">Data</label><input class="form-input" type="date" id="pg_data" /></div>
         <div class="form-group"><label class="form-label">Valor (R$) <span class="required">*</span></label><input class="form-input" id="pg_valor" oninput="mascararValor(this);updateSaldoPreview()" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="pg_obs" /></div>
+        <div class="form-group"><label class="form-label">Anexos</label><input class="form-input" type="file" id="pg_anexo" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xml,.zip" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="registrarPagamento()">+ Registrar</button>
       </div>
     </div>
     ${fin.pagamentos && fin.pagamentos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th>Anexos</th><th></th></tr></thead>
           <tbody>
             ${fin.pagamentos.map(p => {
               const ct = contratadas.find(x => x.id === p.contratadaId);
+              const anexosCount = (p.anexos || []).length;
               return `<tr>
                 <td>${p.numero}</td>
                 <td>${escapeHtml(ct ? ct.razaoSocial : '?')}</td>
                 <td>${p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
                 <td class="font-mono">${formatMoeda(p.valor)}</td>
-                <td><span class="badge ${p.status === 'fechado' ? 'badge-ok' : 'badge-warn'}">${p.status}</span></td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="badge ${p.status === 'fechado' ? 'badge-ok' : 'badge-warn'}">${p.status}</span>
+                    <button class="btn btn-ghost btn-sm" onclick="togglePagamentoStatus('${p.id}')" title="Alternar status">🔄</button>
+                  </div>
+                </td>
+                <td style="text-align:center;">
+                  ${anexosCount > 0
+                    ? `<span style="color:var(--gray-500);font-size:13px;">📎 ${anexosCount}</span>
+                    <button class="btn btn-ghost btn-sm" onclick="togglePagamentoAnexos('${p.id}')" title="Ver anexos">👁️</button>`
+                    : '<span style="color:var(--gray-400);font-size:13px;">—</span>'}
+                </td>
                 <td><button class="btn btn-ghost btn-sm" onclick="removerPagamento('${p.id}')">Remover</button></td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
       </div>
+      <div id="pagamentoAnexosContainer"></div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum pagamento registrado.</div>'}
   `;
 }
@@ -1124,18 +1388,19 @@ function renderExtratos(c) {
   return `
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">Lançar Extrato Mensal</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Mês <span class="required">*</span></label><input class="form-input" type="month" id="ex_mes" /></div>
         <div class="form-group"><label class="form-label">Entradas (R$)</label><input class="form-input" id="ex_entradas" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Saídas (R$)</label><input class="form-input" id="ex_saidas" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="ex_obs" /></div>
+        <div class="form-group"><label class="form-label">Anexo</label><input class="form-input" type="file" id="ex_anexo" accept=".pdf,.jpg,.jpeg,.png" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="lancarExtrato()">+ Lançar</button>
       </div>
     </div>
     ${fin.extratos && fin.extratos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo do Mês</th><th>Obs</th><th></th></tr></thead>
+          <thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo do Mês</th><th>Obs</th><th>Anexo</th><th></th></tr></thead>
           <tbody>
             ${fin.extratos.sort((a, b) => a.mes.localeCompare(b.mes)).map(e => `
               <tr>
@@ -1144,12 +1409,19 @@ function renderExtratos(c) {
                 <td class="font-mono" style="color:var(--danger);">${formatMoeda(e.saidas)}</td>
                 <td class="font-mono">${formatMoeda(e.entradas - e.saidas)}</td>
                 <td>${escapeHtml(e.obs || '—')}</td>
+                <td>
+                  ${(e.anexos || []).length > 0
+                    ? `<span style="color:var(--gray-500);font-size:13px;">📎 ${(e.anexos || []).length}</span>
+                    <button class="btn btn-ghost btn-sm" onclick="toggleExtratoAnexos('${e.id}')" title="Ver anexo">👁️</button>`
+                    : '<span style="color:var(--gray-400);font-size:13px;">—</span>'}
+                </td>
                 <td><button class="btn btn-ghost btn-sm" onclick="removerExtrato('${e.id}')">Remover</button></td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
+      <div id="extratoAnexosContainer"></div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum lançamento de extrato.</div>'}
   `;
 }
@@ -1159,18 +1431,19 @@ function renderRendimentos(c) {
   return `
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">Lançar Rendimento</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Mês <span class="required">*</span></label><input class="form-input" type="month" id="rd_mes" /></div>
         <div class="form-group"><label class="form-label">Aplicado (R$)</label><input class="form-input" id="rd_aplicado" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Rendimento (R$)</label><input class="form-input" id="rd_rendimento" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="rd_obs" /></div>
+        <div class="form-group"><label class="form-label">Anexo</label><input class="form-input" type="file" id="rd_anexo" accept=".pdf,.jpg,.jpeg,.png" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="lancarRendimento()">+ Lançar</button>
       </div>
     </div>
     ${fin.rendimentos && fin.rendimentos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Mês</th><th>Aplicado</th><th>Rendimento</th><th>Obs</th><th></th></tr></thead>
+          <thead><tr><th>Mês</th><th>Aplicado</th><th>Rendimento</th><th>Obs</th><th>Anexo</th><th></th></tr></thead>
           <tbody>
             ${fin.rendimentos.sort((a, b) => a.mes.localeCompare(b.mes)).map(r => `
               <tr>
@@ -1178,12 +1451,19 @@ function renderRendimentos(c) {
                 <td class="font-mono">${formatMoeda(r.aplicado)}</td>
                 <td class="font-mono" style="color:var(--green-600);">${formatMoeda(r.rendimento)}</td>
                 <td>${escapeHtml(r.obs || '—')}</td>
+                <td>
+                  ${(r.anexos || []).length > 0
+                    ? `<span style="color:var(--gray-500);font-size:13px;">📎 ${(r.anexos || []).length}</span>
+                    <button class="btn btn-ghost btn-sm" onclick="toggleRendimentoAnexos('${r.id}')" title="Ver anexo">👁️</button>`
+                    : '<span style="color:var(--gray-400);font-size:13px;">—</span>'}
+                </td>
                 <td><button class="btn btn-ghost btn-sm" onclick="removerRendimento('${r.id}')">Remover</button></td>
               </tr>
             `).join('')}
           </tbody>
         </table>
       </div>
+      <div id="rendimentoAnexosContainer"></div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum rendimento registrado.</div>'}
   `;
 }

@@ -128,6 +128,13 @@ body {
   color: var(--white);
 }
 
+.sidebar-logo-img {
+  width: 180px;
+  height: auto;
+  max-height: 56px;
+  object-fit: contain;
+}
+
 .sidebar-logo-text {
   font-family: 'Source Serif 4', serif;
   font-size: 22px;
