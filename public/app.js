@@ -215,13 +215,13 @@ function mudarDocSubView(sub) {
 const camposConvenio = [
   'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
   'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_telefone', 'c_email',
-  'c_responsavel', 'c_cargo', 'c_resp_cpf', 'c_resp_tel', 'c_resp_email',
-  'c_tec_nome', 'c_tec_reg', 'c_tec_tel', 'c_tec_email',
   'c_banco', 'c_conta', 'c_valor', 'c_contrapartida',
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
 
-const obrigatorios = ['c_numero', 'c_conveniente', 'c_valor', 'c_data_fim'];
+const obrigatoriosBase = ['c_numero', 'c_conveniente', 'c_valor'];
+const obrigatoriosConvenio = [...obrigatoriosBase, 'c_data_fim'];
+const obrigatoriosProjeto = [...obrigatoriosBase];
 
 function getFormData() {
   const d = {};
@@ -261,11 +261,6 @@ function editarConvenio(id) {
     c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
     c_bairro: c.bairroProp, c_municipio: c.municipioProp,
     c_telefone: c.telefoneInst, c_email: c.emailInst,
-    c_responsavel: c.responsavel, c_cargo: c.cargo,
-    c_resp_cpf: c.responsavelCpf, c_resp_tel: c.responsavelTelefone,
-    c_resp_email: c.responsavelEmail,
-    c_tec_nome: c.tecnicoNome, c_tec_reg: c.tecnicoRegistro,
-    c_tec_tel: c.tecnicoTelefone, c_tec_email: c.tecnicoEmail,
     c_banco: c.banco, c_conta: c.conta, c_valor: c.valor,
     c_contrapartida: c.contrapartida,
     c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
@@ -277,6 +272,7 @@ function editarConvenio(id) {
 
 function salvarConvenio() {
   const form = getFormData();
+  const obrigatorios = STATE.tipoInstrumento === 'projeto' ? obrigatoriosProjeto : obrigatoriosConvenio;
   const faltando = obrigatorios.filter(id => !form[id] || !form[id].trim());
   const nota = document.getElementById('savedNote');
 
@@ -301,11 +297,6 @@ function salvarConvenio() {
     cnpj: form.c_cnpj, cep: form.c_cep, logradouro: form.c_logradouro,
     bairroProp: form.c_bairro, municipioProp: form.c_municipio,
     telefoneInst: form.c_telefone, emailInst: form.c_email,
-    responsavel: form.c_responsavel, cargo: form.c_cargo,
-    responsavelCpf: form.c_resp_cpf, responsavelTelefone: form.c_resp_tel,
-    responsavelEmail: form.c_resp_email,
-    tecnicoNome: form.c_tec_nome, tecnicoRegistro: form.c_tec_reg,
-    tecnicoTelefone: form.c_tec_tel, tecnicoEmail: form.c_tec_email,
     banco: form.c_banco, conta: form.c_conta,
     valor: form.c_valor, contrapartida: form.c_contrapartida,
     dataAssinatura: form.c_data_assinatura, dataInicio, dataFim,
@@ -365,6 +356,8 @@ function duplicarConvenio(id) {
 }
 
 function abrirPrestacaoContas(id) {
+  const c = STATE.convenios.find(x => x.id === id);
+  if (c && c.tipo === 'projeto') return;
   STATE.convenioAtualId = id;
   STATE.subView = 'contratadas';
   salvarEstado();
@@ -1017,10 +1010,12 @@ function renderTudo() {
 function renderSidebar() {
   const el = document.getElementById('sidebar');
   if (!el) return;
+  const atual = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  const ehProjetoAtual = atual && atual.tipo === 'projeto';
   const items = [
     { id: 'painel', icon: '📊', label: 'Painel Geral' },
     { id: 'cadastro', icon: '📝', label: 'Cadastro' },
-    { id: 'prestacao', icon: '📋', label: 'Prestação de Contas' },
+    ...(ehProjetoAtual ? [] : [{ id: 'prestacao', icon: '📋', label: 'Prestação de Contas' }]),
     { id: 'documentos', icon: '📁', label: 'Gestão de Documentos' },
     { id: 'relatorios', icon: '📈', label: 'Relatórios' },
     { id: 'emendas', icon: '🏛️', label: 'Emendas Parlamentares' },
@@ -1170,7 +1165,7 @@ function renderPainel() {
             <span class="font-mono" style="font-size:14px;">Saldo: <strong class="${saldoClass}">${saldo}</strong></span>
             <span class="badge ${st.cls}">${st.label}</span>
             <button class="btn btn-ghost btn-sm" onclick="editarConvenio('${c.id}')">Abrir</button>
-            <button class="btn btn-ghost btn-sm" onclick="abrirPrestacaoContas('${c.id}')">📂 PC</button>
+            ${c.tipo === 'projeto' ? '' : `<button class="btn btn-ghost btn-sm" onclick="abrirPrestacaoContas('${c.id}')">📂 PC</button>`}
             <button class="btn btn-ghost btn-sm" onclick="duplicarConvenio('${c.id}')">⧉</button>
             <button class="btn btn-ghost btn-sm" onclick="excluirConvenio('${c.id}')" style="color:var(--danger);">🗑</button>
           </div>
@@ -1263,46 +1258,6 @@ function renderCadastro() {
           <input class="form-input" type="email" id="c_email" />
         </div>
 
-        <div class="form-section-title">👤 Responsável</div>
-        <div class="form-group">
-          <label class="form-label">Nome</label>
-          <input class="form-input" type="text" id="c_responsavel" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Cargo</label>
-          <input class="form-input" type="text" id="c_cargo" placeholder="Prefeito(a) Municipal" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">CPF</label>
-          <input class="form-input" type="text" id="c_resp_cpf" maxlength="14" oninput="mascararCPF(this)" placeholder="000.000.000-00" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Telefone</label>
-          <input class="form-input" type="text" id="c_resp_tel" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">E-mail</label>
-          <input class="form-input" type="email" id="c_resp_email" />
-        </div>
-
-        <div class="form-section-title">🔧 Técnico Responsável</div>
-        <div class="form-group">
-          <label class="form-label">Nome</label>
-          <input class="form-input" type="text" id="c_tec_nome" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Registro Profissional</label>
-          <input class="form-input" type="text" id="c_tec_reg" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Telefone</label>
-          <input class="form-input" type="text" id="c_tec_tel" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">E-mail</label>
-          <input class="form-input" type="email" id="c_tec_email" />
-        </div>
-
         <div class="form-section-title">💰 Dados Financeiros</div>
         <div class="form-group">
           <label class="form-label">Banco</label>
@@ -1328,6 +1283,7 @@ function renderCadastro() {
           <label class="form-label">Data de Assinatura</label>
           <input class="form-input" type="date" id="c_data_assinatura" />
         </div>
+        ${ehConvenio ? `
         <div class="form-group">
           <label class="form-label">Data de Início</label>
           <input class="form-input" type="date" id="c_data_inicio" />
@@ -1336,6 +1292,7 @@ function renderCadastro() {
           <label class="form-label">Data de Fim <span class="required">*</span></label>
           <input class="form-input" type="date" id="c_data_fim" />
         </div>
+        ` : ''}
         <div class="form-group">
           <label class="form-label">Prazo PC (dias)</label>
           <input class="form-input" type="number" id="c_prazo_pc" value="60" min="1" />
@@ -1355,6 +1312,11 @@ function renderPrestacaoContas() {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) {
     return `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhum convênio selecionado</div><div class="empty-state-text">Selecione um convênio no Painel Geral para acessar a Prestação de Contas.</div></div>`;
+  }
+  if (c.tipo === 'projeto') {
+    // Projetos não possuem Prestação de Contas; redireciona sem exibir nada
+    setTimeout(() => mudarView('painel'), 0);
+    return '';
   }
 
   const resumo = calcularResumoFinanceiro(c.id);
@@ -2006,7 +1968,6 @@ function limparFormConvenio() {
   const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
   setVal('c_esfera', 'União');
   setVal('c_natureza', 'Prefeitura Municipal');
-  setVal('c_cargo', 'Prefeito(a) Municipal');
   setVal('c_prazo_pc', '60');
 }
 
@@ -2124,13 +2085,13 @@ function gerarPDFRelatorio() {
     'Órgão: ' + (c.orgao || '—') + '   |   Esfera: ' + (c.esfera || '—') + '   |   Natureza: ' + (c.natureza || '—'),
     'CNPJ: ' + (c.cnpj || '—') + '   |   Endereço: ' + (c.logradouro || '—') + ', ' + (c.bairroProp || '—') + ' — ' + (c.municipioProp || '—'),
     'Contato institucional: ' + (c.telefoneInst || '—') + '   |   ' + (c.emailInst || '—'),
-    'Responsável: ' + (c.responsavel || '—') + ' (' + (c.cargo || '—') + ')   |   CPF: ' + (c.responsavelCpf || '—'),
-    'Contato do responsável: ' + (c.responsavelTelefone || '—') + '   |   ' + (c.responsavelEmail || '—'),
-    'Técnico responsável: ' + (c.tecnicoNome || '—') + '   |   Registro: ' + (c.tecnicoRegistro || '—'),
-    'Contato do técnico: ' + (c.tecnicoTelefone || '—') + '   |   ' + (c.tecnicoEmail || '—'),
+    (c.responsavel || c.cargo || c.responsavelCpf) ? 'Responsável: ' + (c.responsavel || '—') + ' (' + (c.cargo || '—') + ')   |   CPF: ' + (c.responsavelCpf || '—') : null,
+    (c.responsavelTelefone || c.responsavelEmail) ? 'Contato do responsável: ' + (c.responsavelTelefone || '—') + '   |   ' + (c.responsavelEmail || '—') : null,
+    (c.tecnicoNome || c.tecnicoRegistro) ? 'Técnico responsável: ' + (c.tecnicoNome || '—') + '   |   Registro: ' + (c.tecnicoRegistro || '—') : null,
+    (c.tecnicoTelefone || c.tecnicoEmail) ? 'Contato do técnico: ' + (c.tecnicoTelefone || '—') + '   |   ' + (c.tecnicoEmail || '—') : null,
     'Banco/Conta: ' + (c.banco || '—') + ' / ' + (c.conta || '—') + '   |   Contrapartida: ' + (c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : '—'),
     'Assinatura: ' + (c.dataAssinatura || '—') + '   |   Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '   |   PC até: ' + (c.prazoLimitePC || '—'),
-  ];
+  ].filter(Boolean);
   linhasCadastro.forEach(linha => { doc.text(linha, M, y); y += 5; });
 
   y += 6;
