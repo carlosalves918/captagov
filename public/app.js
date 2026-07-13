@@ -2409,6 +2409,112 @@ function importarDados(file){
 })();
 
 /* ============================================================
+ * EXPORTAR ANEXOS EM ZIP
+ * ============================================================ */
+function dataUrlToBlob(dataUrl){
+  if(!dataUrl) return null;
+  try{
+    const arr = dataUrl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    const n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    for(let i = 0; i < n; i++){
+      u8arr[i] = bstr.charCodeAt(i);
+    }
+    return new Blob([u8arr], { type: mime });
+  }catch(e){
+    console.error('Erro ao converter Data URL para Blob:', e);
+    return null;
+  }
+}
+
+function gerarZipAnexos(){
+  const select = document.getElementById('relatorioConvenioSelect');
+  const id = select.value;
+  const c = convenios.find(x => x.id === id);
+  if(!c){ alert('Selecione um convênio para exportar anexos.'); return; }
+  
+  const zip = new JSZip();
+  const nomeConvenio = (c.numero || 'convenio').replace(/[^a-zA-Z0-9-_]/g, '_');
+  const pastaRaiz = zip.folder(nomeConvenio);
+  
+  let temAnexo = false;
+  
+  // ===== DOCUMENTOS GERAIS DO CONVÊNIO =====
+  const pastaDocGeral = pastaRaiz.folder('01_Documentos_Gerais');
+  if(c.documentos){
+    Object.keys(c.documentos).forEach(catId => {
+      const doc = c.documentos[catId];
+      if(doc.anexado && doc.arquivo && doc.arquivoDataUrl){
+        const blob = dataUrlToBlob(doc.arquivoDataUrl);
+        if(blob){
+          pastaDocGeral.file(doc.arquivo, blob);
+          temAnexo = true;
+        }
+      }
+    });
+  }
+  
+  // ===== DOCUMENTOS EXTRAS =====
+  if(c.documentosExtras && c.documentosExtras.length > 0){
+    const pastaExtras = pastaRaiz.folder('02_Documentos_Extras');
+    c.documentosExtras.forEach(doc => {
+      if(doc.anexado && doc.arquivo && doc.arquivoDataUrl){
+        const blob = dataUrlToBlob(doc.arquivoDataUrl);
+        if(blob){
+          pastaExtras.file(doc.arquivo, blob);
+          temAnexo = true;
+        }
+      }
+    });
+  }
+  
+  // ===== DOCUMENTOS DE PAGAMENTOS =====
+  if(c.financeiro && c.financeiro.pagamentos && c.financeiro.pagamentos.length > 0){
+    const pastaPagamentos = pastaRaiz.folder('03_Pagamentos');
+    c.financeiro.pagamentos.forEach((pagamento, idx) => {
+      const contratada = (c.financeiro.contratadas||[]).find(x => x.id === pagamento.contratadaId);
+      const nomePagto = 'Pagamento_' + String(pagamento.numero).padStart(3, '0') + '_' + (contratada ? contratada.razaoSocial.slice(0, 20).replace(/[^a-zA-Z0-9-_]/g, '_') : 'removida');
+      const pastaPagto = pastaPagamentos.folder(nomePagto);
+      
+      if(pagamento.docs){
+        Object.keys(pagamento.docs).forEach(catId => {
+          const doc = pagamento.docs[catId];
+          if(doc.anexado && doc.arquivo && doc.arquivoDataUrl){
+            const blob = dataUrlToBlob(doc.arquivoDataUrl);
+            if(blob){
+              pastaPagto.file(doc.arquivo, blob);
+              temAnexo = true;
+            }
+          }
+        });
+      }
+    });
+  }
+  
+  if(!temAnexo){
+    alert('Nenhum anexo foi encontrado para este convênio.');
+    return;
+  }
+  
+  // Gera e faz download do ZIP
+  zip.generateAsync({ type: 'blob' }).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'anexos-' + nomeConvenio + '-' + new Date().toISOString().slice(0, 10) + '.zip';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }).catch(e => {
+    console.error('Erro ao gerar ZIP:', e);
+    alert('Erro ao gerar arquivo ZIP. Verifique o console para detalhes.');
+  });
+}
+
+/* ============================================================
  * INICIALIZAÇÃO
  * ============================================================ */
 (async function iniciarApp(){
