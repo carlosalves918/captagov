@@ -1211,10 +1211,24 @@ function renderPagamentos(fin){
     card.className = 'pagamento-card ' + p.status;
     const docsHtml = categoriasPagamentoDocs.map(cat => {
       const item = p.docs[cat.id] || { anexado:false, arquivo:null, arquivoDataUrl:null };
+      let arquivoInfoHtml = '';
+      if(item.anexado && item.arquivoDataUrl){
+        arquivoInfoHtml =
+          '<div class="pagdoc-filename-row">' +
+            '<a class="doc-list-download" href="'+item.arquivoDataUrl+'" target="_blank" rel="noopener" download="'+escapeHtml(item.arquivo)+'">⬇ baixar</a>' +
+            '<button type="button" class="btn-ghost btn-small" onclick="removerDocPagamento(\''+p.id+'\',\''+cat.id+'\')">remover</button>' +
+          '</div>';
+      } else if(item.anexado){
+        arquivoInfoHtml =
+          '<div class="pagdoc-filename-row">' +
+            '<span class="pagdoc-filename">📎 ' + escapeHtml(item.arquivo) + ' (conteúdo não salvo)</span>' +
+            '<button type="button" class="btn-ghost btn-small" onclick="removerDocPagamento(\''+p.id+'\',\''+cat.id+'\')">remover</button>' +
+          '</div>';
+      }
       return '<div class="pagdoc-card ' + (item.anexado ? 'ok' : '') + '">' +
         '<div class="pagdoc-title"><span>' + cat.nome + '</span><span class="status-badge ' + (item.anexado ? 'autorizado' : 'pendente') + '">' + (item.anexado ? 'anexado' : 'pendente') + '</span></div>' +
         '<input type="file" onchange="anexarDocPagamento(\'' + p.id + '\',\'' + cat.id + '\', this.files[0])" />' +
-        (item.arquivo ? '<div class="pagdoc-filename">📎 ' + escapeHtml(item.arquivo) + '</div>' : '') +
+        arquivoInfoHtml +
         '</div>';
     }).join('');
 
@@ -1384,6 +1398,114 @@ function anexarDocPagamento(pagamentoId, catId, file){
     renderFinanceiro();
   };
   reader.readAsDataURL(file);
+}
+
+/* Remove um único anexo de um pagamento (mantém o pagamento e as demais
+ * categorias de documento intactas). */
+function removerDocPagamento(pagamentoId, catId){
+  if(!convenioAtualId) return;
+  const c = convenios.find(x => x.id === convenioAtualId);
+  if(!c) return;
+  const p = c.financeiro.pagamentos.find(x => x.id === pagamentoId);
+  if(!p || !p.docs[catId]) return;
+  const cat = categoriasPagamentoDocs.find(x => x.id === catId);
+  if(!confirm('Remover o anexo "' + (cat ? cat.nome : catId) + '" deste pagamento?')) return;
+  p.docs[catId] = { anexado:false, arquivo:null, arquivoDataUrl:null };
+  salvarEstado();
+  renderFinanceiro();
+}
+
+/* Reúne todos os anexos de pagamentos do convênio atual (inclusive os que
+ * vieram de um backup importado) e monta um único .zip para download. */
+function baixarTodosAnexosPagamentos(){
+  if(!convenioAtualId) return;
+  const c = convenios.find(x => x.id === convenioAtualId);
+  if(!c) return;
+  const pagamentos = (c.financeiro && c.financeiro.pagamentos) || [];
+
+  const arquivos = [];
+  pagamentos.slice().sort((a,b) => a.numero - b.numero).forEach(p => {
+    categoriasPagamentoDocs.forEach(cat => {
+      const item = p.docs && p.docs[cat.id];
+      if(item && item.anexado && item.arquivoDataUrl){
+        arquivos.push({
+          pasta: 'pagamento-' + p.numero,
+          nome: item.arquivo || (cat.id + '.bin'),
+          dataUrl: item.arquivoDataUrl
+        });
+      }
+    });
+  });
+
+  if(!arquivos.length){
+    alert('Nenhum anexo com conteúdo salvo foi encontrado nos pagamentos deste convênio.');
+    return;
+  }
+  if(typeof JSZip === 'undefined'){
+    alert('Não foi possível carregar o componente de compactação (JSZip). Verifique sua conexão e tente novamente.');
+    return;
+  }
+
+  const zip = new JSZip();
+  const usados = {};
+  arquivos.forEach(a => {
+    const chave = a.pasta + '/' + a.nome;
+    let nomeFinal = a.nome;
+    if(usados[chave] !== undefined){
+      usados[chave]++;
+      const partes = a.nome.split('.');
+      const ext = partes.length > 1 ? '.' + partes.pop() : '';
+      nomeFinal = partes.join('.') + '-' + usados[chave] + ext;
+    } else {
+      usados[chave] = 0;
+    }
+    const base64 = (a.dataUrl.split(',')[1]) || '';
+    zip.file(a.pasta + '/' + nomeFinal, base64, { base64: true });
+  });
+
+  zip.generateAsync({ type: 'blob' }).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement('a');
+    el.href = url;
+    el.download = 'anexos-pagamentos-' + (c.numero || c.id) + '.zip';
+    document.body.appendChild(el);
+    el.click();
+    el.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }).catch(() => {
+    alert('Não foi possível gerar o arquivo .zip com os anexos.');
+  });
+}
+
+/* Apaga de uma vez o conteúdo de todos os anexos de todos os pagamentos do
+ * convênio atual (os pagamentos e os demais dados permanecem intactos). */
+function excluirTodosAnexosPagamentos(){
+  if(!convenioAtualId) return;
+  const c = convenios.find(x => x.id === convenioAtualId);
+  if(!c) return;
+  const pagamentos = (c.financeiro && c.financeiro.pagamentos) || [];
+
+  let total = 0;
+  pagamentos.forEach(p => {
+    categoriasPagamentoDocs.forEach(cat => {
+      if(p.docs && p.docs[cat.id] && p.docs[cat.id].anexado) total++;
+    });
+  });
+
+  if(!total){
+    alert('Não há anexos de pagamentos para excluir neste convênio.');
+    return;
+  }
+  if(!confirm('Isso vai excluir ' + total + ' anexo(s) de todos os pagamentos deste convênio (os pagamentos em si não serão apagados). Deseja continuar?')) return;
+
+  pagamentos.forEach(p => {
+    categoriasPagamentoDocs.forEach(cat => {
+      p.docs[cat.id] = { anexado:false, arquivo:null, arquivoDataUrl:null };
+    });
+  });
+  salvarEstado();
+  renderFinanceiro();
+  alert('Anexos removidos.');
 }
 
 /* Lançamentos mensais (extrato bancário e rendimento) compartilham a mesma

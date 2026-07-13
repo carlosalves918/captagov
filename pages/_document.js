@@ -20,6 +20,12 @@ export default function Document() {
           src="https://unpkg.com/dexie@3.2.7/dist/dexie.js"
           strategy="beforeInteractive"
         />
+        {/* JSZip é usado para agrupar vários anexos (ex.: anexos de pagamentos
+            importados de um backup) em um único arquivo .zip para download. */}
+        <Script
+          src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"
+          strategy="beforeInteractive"
+        />
       </body>
     </Html>
   );

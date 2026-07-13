@@ -652,6 +652,9 @@
   .pagdoc-title{font-size:11px; font-weight:600; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; gap:6px;}
   .pagdoc-card input[type="file"]{font-size:10px; width:100%;}
   .pagdoc-filename{font-size:10px; color:var(--teal-deep); font-family:'IBM Plex Mono', monospace; margin-top:5px;}
+  .pagdoc-filename-row{display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:6px;}
+  .pagdoc-filename-row .doc-list-download{padding:4px 10px; font-size:10.5px;}
+  .pagdoc-filename-row .btn-small{padding:4px 10px; font-size:10.5px;}
 
   @media print{
     .sidebar, .content-masthead, .report-toolbar, .save-bar, .actions{display:none !important;}
