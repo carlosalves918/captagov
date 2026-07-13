@@ -16,6 +16,7 @@ const STATE = {
   view: 'painel',
   subView: 'contratadas',
   docSubView: 'ia',
+  cadastroMensagem: null,
   tipoInstrumento: 'convenio',
   emTipoAtual: 'Convênio',
 };
@@ -201,6 +202,7 @@ function mudarView(view) {
   else if (view === 'documentos') STATE.docSubView = 'ia';
   else if (view === 'emendas') STATE.subView = 'lista';
   else if (view === 'relatorios') STATE.subView = 'contratadas';
+  if (view !== 'cadastro') STATE.cadastroMensagem = null;
   renderTudo();
 }
 
@@ -240,6 +242,7 @@ function setFormData(d) {
 function novoConvenio(tipo) {
   STATE.convenioEditandoId = null;
   STATE.tipoInstrumento = tipo || 'convenio';
+  STATE.cadastroMensagem = null;
   limparFormConvenio();
   mudarView('cadastro');
 }
@@ -250,6 +253,7 @@ function editarConvenio(id) {
   STATE.convenioEditandoId = id;
   STATE.convenioAtualId = id;
   STATE.tipoInstrumento = c.tipo || 'convenio';
+  STATE.cadastroMensagem = null;
   // Compatibilidade com registros antigos: "Federal" agora é "União"; dado antigo de proponente vira conveniente
   const esferaNormalizada = c.esfera === 'Federal' ? 'União' : (c.esfera === 'Estadual' ? 'Estado' : c.esfera);
   setFormData({
@@ -272,17 +276,18 @@ function salvarConvenio() {
   const form = getFormData();
   const obrigatorios = STATE.tipoInstrumento === 'projeto' ? obrigatoriosProjeto : obrigatoriosConvenio;
   const faltando = obrigatorios.filter(id => !form[id] || !form[id].trim());
-  const nota = document.getElementById('savedNote');
 
   if (faltando.length) {
-    nota.innerHTML = '<div class="alert alert-warning">Preencha os campos obrigatórios: ' + faltando.map(id => document.getElementById(id)?.closest('.form-group')?.querySelector('.form-label')?.textContent || id).join(', ') + '.</div>';
+    STATE.cadastroMensagem = '<div class="alert alert-warning">Preencha os campos obrigatórios: ' + faltando.map(id => document.getElementById(id)?.closest('.form-group')?.querySelector('.form-label')?.textContent || id).join(', ') + '.</div>';
+    renderTudo();
     return;
   }
 
   const dataInicio = form.c_data_inicio;
   const dataFim = form.c_data_fim;
   if (dataInicio && dataFim && new Date(dataFim) < new Date(dataInicio)) {
-    nota.innerHTML = '<div class="alert alert-danger">A data de fim não pode ser anterior à data de início.</div>';
+    STATE.cadastroMensagem = '<div class="alert alert-danger">A data de fim não pode ser anterior à data de início.</div>';
+    renderTudo();
     return;
   }
 
@@ -309,6 +314,9 @@ function salvarConvenio() {
         ...dados,
       };
     }
+    salvarEstado();
+    STATE.cadastroMensagem = '<div class="alert alert-success">Convênio salvo às ' + new Date().toLocaleTimeString('pt-BR') + '</div>';
+    renderTudo();
   } else {
     const novoId = gerarId('c');
     const novo = {
@@ -322,11 +330,11 @@ function salvarConvenio() {
     STATE.convenios.push(novo);
     STATE.convenioEditandoId = novoId;
     STATE.convenioAtualId = novoId;
+    salvarEstado();
+    STATE.cadastroMensagem = '<div class="alert alert-success">Cadastrado com sucesso! Voltando ao Painel...</div>';
+    renderTudo();
+    setTimeout(() => { STATE.cadastroMensagem = null; mudarView('painel'); }, 900);
   }
-
-  salvarEstado();
-  nota.innerHTML = '<div class="alert alert-success">Convênio salvo às ' + new Date().toLocaleTimeString('pt-BR') + '</div>';
-  renderTudo();
 }
 
 function excluirConvenio(id) {
@@ -1110,7 +1118,7 @@ function renderHeader() {
     <div class="main-header-left">
       <div>
         <div class="main-header-title">${nomesAbas[STATE.view] || STATE.view}</div>
-        ${c ? '<div class="main-header-breadcrumb">Convênio: ' + escapeHtml(c.numero || 'sem número') + ' — ' + escapeHtml(c.programa || '') + '</div>' : ''}
+        ${c ? '<div class="main-header-breadcrumb">' + escapeHtml(c.conveniente || c.proponente || 'Convenente não informado') + ' · Convênio nº ' + escapeHtml(c.numero || 'sem número') + '</div>' : ''}
       </div>
     </div>
     <div class="main-header-date">${hojeFormatado()}</div>
@@ -1232,6 +1240,7 @@ function renderCadastro() {
   const ehConvenio = STATE.tipoInstrumento === 'convenio';
   return `
     <div class="card">
+      <button class="btn btn-ghost btn-sm" style="margin-bottom:16px;" onclick="mudarView('painel')">← Voltar ao Painel</button>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
         <div>
           <div class="card-title">${STATE.convenioEditandoId ? 'Editar' : 'Novo'} ${ehConvenio ? 'Convênio' : 'Projeto'}</div>
@@ -1243,7 +1252,7 @@ function renderCadastro() {
         </div>
       </div>
 
-      <div id="savedNote"></div>
+      <div id="savedNote">${STATE.cadastroMensagem || ''}</div>
 
       <div class="form-grid">
         <div class="form-section-title">📌 Identificação do ${ehConvenio ? 'Convênio' : 'Projeto'}</div>
