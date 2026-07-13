@@ -11,6 +11,7 @@ const STATE = {
   convenioAtualId: null,
   convenioEditandoId: null,
   emendaEditandoId: null,
+  contratadaEditandoId: null,
   protocoloSeq: 0,
   view: 'painel',
   subView: 'contratadas',
@@ -435,16 +436,52 @@ function adicionarContratada() {
   const nome = document.getElementById('ct_razao')?.value.trim();
   const cnpj = document.getElementById('ct_cnpj')?.value.trim();
   if (!nome) { alert('Informe a razão social.'); return; }
-  c.financeiro.contratadas.push({
-    id: gerarId('ct'), razaoSocial: nome, cnpj,
-    numeroContrato: document.getElementById('ct_numero')?.value || '',
-    valorContrato: document.getElementById('ct_valorContrato')?.value || '',
-  });
+  const numeroContrato = document.getElementById('ct_numero')?.value || '';
+  const valorContrato = document.getElementById('ct_valorContrato')?.value || '';
+
+  if (STATE.contratadaEditandoId) {
+    const ct = c.financeiro.contratadas.find(x => x.id === STATE.contratadaEditandoId);
+    if (ct) {
+      ct.razaoSocial = nome;
+      ct.cnpj = cnpj;
+      ct.numeroContrato = numeroContrato;
+      ct.valorContrato = valorContrato;
+    }
+    STATE.contratadaEditandoId = null;
+  } else {
+    c.financeiro.contratadas.push({
+      id: gerarId('ct'), razaoSocial: nome, cnpj, numeroContrato, valorContrato,
+    });
+  }
   salvarEstado();
   document.getElementById('ct_razao').value = '';
   document.getElementById('ct_cnpj').value = '';
   document.getElementById('ct_numero').value = '';
   document.getElementById('ct_valorContrato').value = '';
+  renderFinanceiro();
+}
+
+function editarContratada(id) {
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const ct = (c.financeiro.contratadas || []).find(x => x.id === id);
+  if (!ct) return;
+  STATE.contratadaEditandoId = id;
+  renderFinanceiro();
+  const razaoEl = document.getElementById('ct_razao');
+  if (razaoEl) razaoEl.value = ct.razaoSocial || '';
+  const cnpjEl = document.getElementById('ct_cnpj');
+  if (cnpjEl) cnpjEl.value = ct.cnpj || '';
+  const numEl = document.getElementById('ct_numero');
+  if (numEl) numEl.value = ct.numeroContrato || '';
+  const valEl = document.getElementById('ct_valorContrato');
+  if (valEl) valEl.value = ct.valorContrato || '';
+  razaoEl?.focus();
+}
+
+function cancelarEdicaoContratada() {
+  STATE.contratadaEditandoId = null;
   renderFinanceiro();
 }
 
@@ -463,24 +500,11 @@ async function registrarPagamento() {
   const contratadaId = document.getElementById('pg_contratada')?.value || '';
   if (!contratadaId) { alert('Selecione a contratada.'); return; }
 
-  const anexos = [];
-  const fileInput = document.getElementById('pg_anexo');
-  if (fileInput && fileInput.files && fileInput.files.length > 0) {
-    for (let i = 0; i < fileInput.files.length; i++) {
-      const file = fileInput.files[i];
-      anexos.push({ nome: file.name, type: file.type, dataUrl: null });
-      await lerArquivoComoDataUrl(file).then(dataUrl => {
-        anexos[anexos.length - 1].dataUrl = dataUrl;
-      });
-    }
-  }
-
   c.financeiro.pagamentos.push({
     id: gerarId('pg'), numero: c.financeiro.pagamentos.length + 1,
     contratadaId, valor, data: document.getElementById('pg_data')?.value || '',
     status: 'pendente',
     docs: docsVaziosPagamento(),
-    anexos: anexos,
     obs: document.getElementById('pg_obs')?.value || '',
   });
   salvarEstado();
@@ -582,44 +606,6 @@ function removerDocPagamento(pagamentoId, catId) {
   pg.docs[catId] = { anexado: false, arquivo: null, arquivoDataUrl: null };
   salvarEstado();
   togglePagamentoDocs(pagamentoId);
-}
-
-function togglePagamentoAnexos(pagamentoId) {
-  const container = document.getElementById('pagamentoAnexosContainer');
-  if (!container) return;
-  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
-  if (!c) return;
-  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
-  if (!pg) return;
-  const anexos = pg.anexos || [];
-  if (anexos.length === 0) {
-    container.innerHTML = '<div style="padding:12px 16px;color:var(--gray-500);">Nenhum anexo neste pagamento.</div>';
-    return;
-  }
-  container.innerHTML = `
-    <div style="margin-top:12px;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
-      <div style="font-size:13px;color:var(--gray-600);margin-bottom:8px;font-weight:600;">Anexos — Pagamento nº ${pg.numero}</div>
-      ${anexos.map(a => `
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--gray-100);">
-          <div style="font-size:13px;color:var(--gray-700);">📎 ${escapeHtml(a.nome)} <span style="color:var(--gray-400);font-size:12px;">${escapeHtml(a.type || '')}</span></div>
-          <div style="display:flex;gap:6px;">
-            ${a.dataUrl ? `<a href="${a.dataUrl}" download="${escapeHtml(a.nome)}" class="btn btn-ghost btn-sm">⬇ Baixar</a>` : ''}
-            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerAnexoPagamento('${pg.id}','${escapeHtml(a.nome)}')">✕</button>
-          </div>
-        </div>
-      `).join('')}
-    </div>`;
-}
-
-function removerAnexoPagamento(pagamentoId, nome) {
-  if (!STATE.convenioAtualId) return;
-  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
-  if (!c) return;
-  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
-  if (!pg || !pg.anexos) return;
-  pg.anexos = pg.anexos.filter(a => a.nome !== nome);
-  salvarEstado();
-  renderFinanceiro();
 }
 
 // ==================== EXTRATOS ====================
@@ -1411,16 +1397,20 @@ function renderFinanceiro() {
 
 function renderContratadas(c) {
   const fin = c.financeiro;
+  const editando = STATE.contratadaEditandoId ? (fin.contratadas || []).find(x => x.id === STATE.contratadaEditandoId) : null;
   return `
     <div style="margin-bottom:20px;">
-      <div class="card-title" style="font-size:16px;">Adicionar Contratada</div>
+      <div class="card-title" style="font-size:16px;">${editando ? 'Editar Contratada' : 'Adicionar Contratada'}</div>
       <div class="card-subtitle">Cadastre empresas contratadas para vincular pagamentos.</div>
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Razão Social <span class="required">*</span></label><input class="form-input" id="ct_razao" /></div>
         <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" id="ct_cnpj" maxlength="18" oninput="mascararCNPJ(this)" /></div>
         <div class="form-group"><label class="form-label">Nº Contrato</label><input class="form-input" id="ct_numero" /></div>
         <div class="form-group"><label class="form-label">Valor Contrato</label><input class="form-input" id="ct_valorContrato" oninput="mascararValor(this)" inputmode="numeric" /></div>
-        <button class="btn btn-primary" style="height:42px;" onclick="adicionarContratada()">+ Adicionar</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary" style="height:42px;" onclick="adicionarContratada()">${editando ? '💾 Salvar' : '+ Adicionar'}</button>
+          ${editando ? `<button class="btn btn-secondary" style="height:42px;" onclick="cancelarEdicaoContratada()">Cancelar</button>` : ''}
+        </div>
       </div>
     </div>
     ${fin.contratadas && fin.contratadas.length > 0 ? `
@@ -1429,12 +1419,15 @@ function renderContratadas(c) {
           <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th></th></tr></thead>
           <tbody>
             ${fin.contratadas.map(ct => `
-              <tr>
+              <tr${STATE.contratadaEditandoId === ct.id ? ' style="background:var(--blue-100);"' : ''}>
                 <td><strong>${escapeHtml(ct.razaoSocial)}</strong></td>
                 <td>${escapeHtml(ct.cnpj || '—')}</td>
                 <td>${escapeHtml(ct.numeroContrato || '—')}</td>
                 <td class="font-mono">${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</td>
-                <td><button class="btn btn-ghost btn-sm" onclick="removerContratada('${ct.id}')">Remover</button></td>
+                <td style="display:flex;gap:6px;">
+                  <button class="btn btn-ghost btn-sm" onclick="editarContratada('${ct.id}')">Editar</button>
+                  <button class="btn btn-ghost btn-sm" onclick="removerContratada('${ct.id}')">Remover</button>
+                </td>
               </tr>
             `).join('')}
           </tbody>
@@ -1461,18 +1454,16 @@ function renderPagamentos(c, resumo) {
         <div class="form-group"><label class="form-label">Data</label><input class="form-input" type="date" id="pg_data" /></div>
         <div class="form-group"><label class="form-label">Valor (R$) <span class="required">*</span></label><input class="form-input" id="pg_valor" oninput="mascararValor(this);updateSaldoPreview()" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="pg_obs" /></div>
-        <div class="form-group"><label class="form-label">Anexos</label><input class="form-input" type="file" id="pg_anexo" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xml,.zip" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="registrarPagamento()">+ Registrar</button>
       </div>
     </div>
     ${fin.pagamentos && fin.pagamentos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th>Anexos</th><th>Checklist Docs</th><th></th></tr></thead>
+          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th>Checklist Docs</th><th></th></tr></thead>
           <tbody>
             ${fin.pagamentos.map(p => {
               const ct = contratadas.find(x => x.id === p.contratadaId);
-              const anexosCount = (p.anexos || []).length;
               const docsObj = p.docs || {};
               const docsTotal = CATEGORIAS_DOC_PAGAMENTO.length;
               const docsAnexados = CATEGORIAS_DOC_PAGAMENTO.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
@@ -1488,12 +1479,6 @@ function renderPagamentos(c, resumo) {
                   </div>
                 </td>
                 <td style="text-align:center;">
-                  ${anexosCount > 0
-                    ? `<span style="color:var(--gray-500);font-size:13px;">📎 ${anexosCount}</span>
-                    <button class="btn btn-ghost btn-sm" onclick="togglePagamentoAnexos('${p.id}')" title="Ver anexos">👁️</button>`
-                    : '<span style="color:var(--gray-400);font-size:13px;">—</span>'}
-                </td>
-                <td style="text-align:center;">
                   <button class="btn btn-ghost btn-sm" onclick="togglePagamentoDocs('${p.id}')" title="Checklist de documentos do pagamento">
                     📁 ${docsAnexados}/${docsTotal}
                   </button>
@@ -1504,7 +1489,6 @@ function renderPagamentos(c, resumo) {
           </tbody>
         </table>
       </div>
-      <div id="pagamentoAnexosContainer"></div>
       <div id="pagamentoDocsContainer"></div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum pagamento registrado.</div>'}
   `;
@@ -1968,6 +1952,7 @@ function removerContratada(id) {
   if (!c) return;
   if (!confirm('Remover esta contratada?')) return;
   c.financeiro.contratadas = (c.financeiro.contratadas || []).filter(x => x.id !== id);
+  if (STATE.contratadaEditandoId === id) STATE.contratadaEditandoId = null;
   salvarEstado();
   renderTudo();
 }
