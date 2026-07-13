@@ -1,0 +1,684 @@
+
+  <aside class="sidebar">
+    <div class="brand-row">
+      <div class="seal-emblem">GS</div>
+      <div class="brand">CaptaGov<small>Módulo Documentos — protótipo local</small></div>
+    </div>
+    <hr class="sidebar-rule" />
+    <div class="sidebar-counter"><b id="contadorConvenios">0</b> convênio(s) cadastrados</div>
+    <div class="folder-tabs" role="tablist" aria-label="Navegação principal">
+      <div class="tab active" role="tab" tabindex="0" aria-selected="true" data-view="painel" onclick="mudarAba('painel')" onkeydown="if(event.key==='Enter'||event.key===' '){mudarAba('painel');}">📋 Painel geral</div>
+      <div class="tab" role="tab" tabindex="0" aria-selected="false" data-view="cadastro" onclick="mudarAba('cadastro')" onkeydown="if(event.key==='Enter'||event.key===' '){mudarAba('cadastro');}">📊 Convênio</div>
+      <div class="tab" role="tab" tabindex="0" aria-selected="false" data-view="checklist" onclick="mudarAba('checklist')" onkeydown="if(event.key==='Enter'||event.key===' '){mudarAba('checklist');}">📂 Prestação de contas</div>
+      <div class="tab" role="tab" tabindex="0" aria-selected="false" data-view="documento" onclick="mudarAba('documento')" onkeydown="if(event.key==='Enter'||event.key===' '){mudarAba('documento');}">📄 Gestão de Documentos</div>
+      <div class="tab" role="tab" tabindex="0" aria-selected="false" data-view="relatorio" onclick="mudarAba('relatorio')" onkeydown="if(event.key==='Enter'||event.key===' '){mudarAba('relatorio');}">📈 Relatórios</div>
+      <hr class="sidebar-divider" />
+      <div class="tab" role="tab" tabindex="0" aria-selected="false" data-view="emendas" onclick="mudarAba('emendas')" onkeydown="if(event.key==='Enter'||event.key===' '){mudarAba('emendas');}">🧾 Emendas Parlamentares</div>
+    </div>
+    <div class="storage-note">
+      <div><span class="dot"></span><b>Armazenamento local</b> — dados e anexos ficam salvos no navegador deste computador.</div>
+      <div style="margin-top:8px;"><span class="dot"></span><b>Funciona 100% offline</b> — inclusive a geração de texto, que não depende de internet nem envia dados para fora.</div>
+      <div style="margin-top:14px;" class="sidebar-actions">
+        <button class="sidebar-btn" onclick="exportarDados()" title="Baixar um arquivo .json com todos os dados">⬇ Exportar backup</button>
+        <button class="sidebar-btn" onclick="document.getElementById('importInput').click()" title="Restaurar dados a partir de um backup .json">⬆ Importar</button>
+      </div>
+      <input type="file" id="importInput" accept="application/json" class="hidden" onchange="importarDados(this.files[0])" />
+      <div style="margin-top:8px; font-size:9.5px; opacity:0.85;">Dados salvos no navegador podem ser perdidos se o histórico/cache for limpo. Exporte um backup periodicamente.</div>
+    </div>
+  </aside>
+
+  <main>
+
+    <header class="content-masthead">
+      <div class="masthead-path" id="mastheadPath">CAPTAGOV / PAINEL GERAL<span class="active-convenio-tag hidden" id="tagConvenioAtivo"></span></div>
+      <div class="masthead-date" id="mastheadDate"></div>
+    </header>
+
+    <!-- ABA: PAINEL GERAL -->
+    <div class="view active" id="view-painel">
+      <div class="eyebrow">Visão geral</div>
+      <h1>Painel de Convênios</h1>
+      <div class="sub">Todos os instrumentos cadastrados nesta pasta de trabalho.</div>
+
+      <div class="actions" style="margin-top:0;">
+        <button onclick="novoConvenio('convenio')">+ Novo convênio</button>
+        <button class="btn-ghost" onclick="novoConvenio('projeto')">+ Novo projeto</button>
+        <input type="text" id="painelBusca" placeholder="Buscar por número, programa ou proponente…" oninput="renderPainel()" style="min-width:280px;" aria-label="Buscar por número, programa ou proponente…" />
+      </div>
+
+      <div id="painelLista" style="margin-top:24px;"></div>
+    </div>
+
+    <!-- ABA: CADASTRO DO CONVÊNIO -->
+    <div class="view" id="view-cadastro">
+      <div class="eyebrow">Estrutura baseada no ciclo TransfereGov</div>
+      <h1 id="cadastroTitulo">Cadastro do Convênio</h1>
+      <div class="sub">Dados do instrumento, do órgão concedente, do proponente e prazos de execução.</div>
+      <div class="badge-phase"><span class="dot" style="background:var(--teal)"></span>Fase: Celebração</div>
+
+      <div class="field-group-label">Tipo de instrumento</div>
+      <div class="tipo-toggle" role="radiogroup" aria-label="Tipo de instrumento">
+        <button type="button" class="tipo-toggle-btn active" id="tipoBtnConvenio" onclick="selecionarTipoInstrumento('convenio')">
+          Convênio <small>emenda parlamentar / recurso da União ou Estado</small>
+        </button>
+        <button type="button" class="tipo-toggle-btn" id="tipoBtnProjeto" onclick="selecionarTipoInstrumento('projeto')">
+          Projeto <small>ação com recurso do tesouro municipal</small>
+        </button>
+      </div>
+
+      <div class="grid">
+        <div class="field">
+          <label id="labelNumero" for="c_numero">Número / identificação do convênio *</label>
+          <input id="c_numero" value="CV-2026-0031" />
+        </div>
+        <div class="field">
+          <label for="c_programa">Programa</label>
+          <input id="c_programa" value="Construção de Creches — FNDE" />
+        </div>
+
+        <div class="field-group-label campo-convenio">Órgão concedente</div>
+        <div class="field campo-convenio">
+          <label for="c_orgao">Nome do órgão</label>
+          <input id="c_orgao" value="Fundo Nacional de Desenvolvimento da Educação (FNDE)" />
+        </div>
+        <div class="field campo-convenio">
+          <label for="c_esfera">Esfera</label>
+          <select id="c_esfera">
+            <option>Federal</option>
+            <option>Estadual</option>
+            <option>Municipal</option>
+          </select>
+        </div>
+
+        <div class="field-group-label">Proponente / Convenente</div>
+        <div class="field campo-convenio">
+          <label for="c_natureza">Natureza jurídica</label>
+          <select id="c_natureza">
+            <option>Prefeitura Municipal</option>
+            <option>Governo do Estado</option>
+            <option>Consórcio Público</option>
+            <option>Autarquia</option>
+            <option>Fundação Pública</option>
+            <option>Câmara Municipal</option>
+            <option>Organização da Sociedade Civil (OSC)</option>
+            <option>Empresa Pública</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="c_proponente">Entidade proponente *</label>
+          <input id="c_proponente" value="Prefeitura Municipal de Itapissuma" />
+        </div>
+        <div class="field">
+          <label for="c_cnpj">CNPJ</label>
+          <input id="c_cnpj" value="10.325.XXX/0001-XX" oninput="mascarar(this,'cnpj')" maxlength="18" />
+        </div>
+        <div class="field">
+          <label for="c_cep">CEP</label>
+          <input id="c_cep" value="" placeholder="00000-000" oninput="mascarar(this,'cep')" maxlength="9" />
+        </div>
+        <div class="field full">
+          <label for="c_logradouro">Endereço (logradouro e número)</label>
+          <input id="c_logradouro" value="" placeholder="Ex.: Av. Central, 450" />
+        </div>
+        <div class="field">
+          <label for="c_bairro_prop">Bairro</label>
+          <input id="c_bairro_prop" value="" />
+        </div>
+        <div class="field">
+          <label for="c_municipio_prop">Município / UF</label>
+          <input id="c_municipio_prop" value="Itapissuma / PE" />
+        </div>
+        <div class="field">
+          <label for="c_telefone_inst">Telefone institucional</label>
+          <input id="c_telefone_inst" value="" placeholder="(81) 0000-0000" />
+        </div>
+        <div class="field">
+          <label for="c_email_inst">E-mail institucional</label>
+          <input id="c_email_inst" value="" placeholder="convenios@prefeitura.gov.br" />
+        </div>
+
+        <div class="field-group-label">Responsável legal (ordenador de despesa)</div>
+        <div class="field">
+          <label for="c_responsavel">Nome</label>
+          <input id="c_responsavel" value="" placeholder="Nome do prefeito(a) / ordenador de despesa" />
+        </div>
+        <div class="field">
+          <label for="c_cargo">Cargo</label>
+          <input id="c_cargo" value="Prefeito(a) Municipal" />
+        </div>
+        <div class="field">
+          <label for="c_responsavel_cpf">CPF</label>
+          <input id="c_responsavel_cpf" value="" placeholder="000.000.000-00" oninput="mascarar(this,'cpf')" maxlength="14" />
+        </div>
+        <div class="field">
+          <label for="c_responsavel_telefone">Telefone</label>
+          <input id="c_responsavel_telefone" value="" />
+        </div>
+        <div class="field full">
+          <label for="c_responsavel_email">E-mail</label>
+          <input id="c_responsavel_email" value="" />
+        </div>
+
+        <div class="field-group-label">Responsável técnico (engenharia / projeto)</div>
+        <div class="field">
+          <label for="c_tecnico_nome">Nome</label>
+          <input id="c_tecnico_nome" value="" placeholder="Engenheiro(a) / Arquiteto(a) responsável" />
+        </div>
+        <div class="field">
+          <label for="c_tecnico_registro">Registro profissional (CREA/CAU)</label>
+          <input id="c_tecnico_registro" value="" placeholder="Ex.: CREA-PE 000000" />
+        </div>
+        <div class="field">
+          <label for="c_tecnico_telefone">Telefone</label>
+          <input id="c_tecnico_telefone" value="" />
+        </div>
+        <div class="field">
+          <label for="c_tecnico_email">E-mail</label>
+          <input id="c_tecnico_email" value="" />
+        </div>
+
+        <div class="field-group-label">Conta específica do convênio</div>
+        <div class="field">
+          <label for="c_banco">Banco</label>
+          <input id="c_banco" value="Banco do Brasil" />
+        </div>
+        <div class="field">
+          <label for="c_conta">Agência / Conta</label>
+          <input id="c_conta" value="" placeholder="Ex.: 1234-5 / 67890-1" />
+        </div>
+
+        <div class="field-group-label">Valores</div>
+        <div class="field">
+          <label id="labelValor" for="c_valor">Valor total do convênio (R$) *</label>
+          <input id="c_valor" value="4.000.000,00" />
+        </div>
+        <div class="field campo-convenio">
+          <label for="c_contrapartida">Contrapartida municipal (R$)</label>
+          <input id="c_contrapartida" value="200.000,00" />
+        </div>
+
+        <div class="field-group-label">Prazos e vigência</div>
+        <div class="field">
+          <label for="c_data_assinatura">Data de assinatura / celebração</label>
+          <input type="date" id="c_data_assinatura" value="2026-07-10" onchange="calcularPrazos()" />
+        </div>
+        <div class="field">
+          <label for="c_data_inicio">Data de início de vigência</label>
+          <input type="date" id="c_data_inicio" value="2026-08-01" onchange="calcularPrazos()" />
+        </div>
+        <div class="field">
+          <label for="c_data_fim">Data de fim de vigência *</label>
+          <input type="date" id="c_data_fim" value="2027-08-01" onchange="calcularPrazos()" />
+        </div>
+        <div class="field">
+          <label for="c_prazo_pc">Prazo para prestação de contas (dias após o fim)</label>
+          <input type="number" id="c_prazo_pc" value="60" onchange="calcularPrazos()" />
+        </div>
+      </div>
+
+      <div class="deadline-card">
+        <div>
+          <div class="label">Prazo limite para prestação de contas</div>
+          <div class="date" id="dataLimitePC">—</div>
+        </div>
+        <div class="chip ok" id="chipPrazo">calculado automaticamente</div>
+      </div>
+
+      <div class="save-bar">
+        <button onclick="salvarConvenio()">Salvar convênio localmente</button>
+        <button class="btn-ghost" onclick="mudarAba('painel')">← Voltar ao painel</button>
+        <div class="saved-note" id="savedNote"></div>
+      </div>
+    </div>
+
+    <!-- ABA: PRESTAÇÃO DE CONTAS / CHECKLIST — UNIFICA DOCUMENTOS + FINANCEIRO -->
+    <div class="view" id="view-checklist">
+      <div class="eyebrow">Acompanhamento integrado</div>
+      <h1>Prestação de Contas</h1>
+      <div class="sub" id="checklistConvenioLabel">Saldo do convênio, pagamentos às contratadas, controle financeiro mensal e checklist documental.</div>
+
+      <div class="painel-empty" id="checklistEmpty">Nenhum convênio selecionado. Volte ao <b>Painel geral</b> e clique em <b>Prestação de contas</b> no convênio desejado.</div>
+
+      <div id="checklistContent" class="hidden">
+        <!-- ===== SALDO CONSOLIDADO EM TEMPO REAL ===== -->
+        <div class="fin-summary-grid">
+          <div class="fin-summary-card">
+            <div class="fin-summary-label">Valor contratual do convênio</div>
+            <div class="fin-summary-value" id="finValorConvenio">R$ 0,00</div>
+          </div>
+          <div class="fin-summary-card">
+            <div class="fin-summary-label">Movimento do extrato</div>
+            <div class="fin-summary-value teal" id="finMovExtrato">R$ 0,00</div>
+          </div>
+          <div class="fin-summary-card">
+            <div class="fin-summary-label">Rendimento acumulado</div>
+            <div class="fin-summary-value gold" id="finRendAcumulado">R$ 0,00</div>
+          </div>
+          <div class="fin-summary-card">
+            <div class="fin-summary-label">Total já pago às contratadas</div>
+            <div class="fin-summary-value seal" id="finTotalPago">R$ 0,00</div>
+          </div>
+          <div class="fin-summary-card tot">
+            <div class="fin-summary-label">Saldo disponível</div>
+            <div class="fin-summary-value" id="finSaldoTotal">R$ 0,00</div>
+          </div>
+        </div>
+
+        <!-- ===== SALDO EM TEMPO REAL — FEEDBACK VISUAL AO INSERIR PAGAMENTO ===== -->
+        <div class="saldo-realtime" id="saldoRealtime">
+          <div>
+            <div class="rotulo">Saldo disponível para pagamento</div>
+            <div class="valor" id="saldoRealtimeValor">R$ 0,00</div>
+          </div>
+          <div style="font-size:11px; color:var(--ink-soft); max-width:240px;">
+            Este valor é recalculado automaticamente a cada lançamento. Se o pagamento exceder o saldo, o sistema bloqueia e alerta.
+          </div>
+        </div>
+
+        <!-- ===== SUBMENU DA PRESTAÇÃO DE CONTAS ===== -->
+        <div class="subtab-bar" role="tablist" aria-label="Seções da prestação de contas">
+          <button class="subtab active" data-subview="contratadas" onclick="mudarSubaba('contratadas')">Contratadas</button>
+          <button class="subtab" data-subview="pagamentos" onclick="mudarSubaba('pagamentos')">Pagamentos</button>
+          <button class="subtab" data-subview="documentos" onclick="mudarSubaba('documentos')">Documentos</button>
+          <button class="subtab" data-subview="extratos" onclick="mudarSubaba('extratos')">Extrato bancário</button>
+          <button class="subtab" data-subview="rendimentos" onclick="mudarSubaba('rendimentos')">Rendimentos</button>
+          <button class="subtab" data-subview="autorizacoes" onclick="mudarSubaba('autorizacoes')">Autorizações e usos</button>
+        </div>
+
+        <!-- ===== CONTRATADAS ===== -->
+        <div class="subview active" id="sub-contratadas">
+          <div class="fin-block-title">Contratadas do convênio</div>
+          <div class="fin-block-sub">Cadastre a(s) empresa(s) contratada(s) neste convênio e anexe o contrato. Cada pagamento é vinculado a uma contratada.</div>
+          <div class="fin-card">
+            <div class="fin-form-row">
+              <input type="text" id="ct_razaoSocial" placeholder="Razão social da contratada" aria-label="Razão social da contratada" />
+              <input type="text" id="ct_cnpj" placeholder="CNPJ" oninput="mascarar(this,'cnpj')" maxlength="18" aria-label="CNPJ" />
+              <input type="text" id="ct_numeroContrato" placeholder="Nº do contrato" aria-label="Nº do contrato" />
+            </div>
+            <div class="fin-form-row">
+              <input type="text" id="ct_objeto" placeholder="Objeto do contrato" aria-label="Objeto do contrato" />
+              <input type="text" id="ct_valorContrato" placeholder="Valor contratado (R$)" aria-label="Valor contratado (R$)" />
+              <button class="btn-small" onclick="adicionarContratada()">+ Cadastrar contratada</button>
+            </div>
+            <table class="fin-table">
+              <thead><tr><th>Contratada</th><th>CNPJ</th><th>Contrato</th><th>Objeto</th><th>Valor contratado</th><th>Anexo do contrato</th><th></th></tr></thead>
+              <tbody id="tabelaContratadas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== PAGAMENTOS ===== -->
+        <div class="subview" id="sub-pagamentos">
+          <div class="fin-block-title">Pagamentos</div>
+          <div class="fin-block-sub">Cada pagamento é uma medição vinculada a uma contratada. Os documentos da medição ficam anexados diretamente a ele.</div>
+          <div class="fin-card">
+            <div class="fin-card-title">Inserir pagamento</div>
+            <div id="finAlertContratada"></div>
+            <div class="fin-form-row">
+              <select id="pg_contratada" aria-label="Selecionar contratada para o pagamento"></select>
+              <input type="text" id="pg_valor" placeholder="Valor do pagamento (R$)" oninput="atualizarSaldoPreview()" aria-label="Valor do pagamento (R$)" />
+              <input type="date" id="pg_data" />
+            </div>
+            <div class="fin-form-row">
+              <input type="text" id="pg_descricao" placeholder="Descrição da medição (ex.: 1ª medição — fundação)" aria-label="Descrição da medição (ex.: 1ª medição — fundação)" />
+              <button class="btn-small" onclick="novoPagamento()">+ Inserir pagamento</button>
+            </div>
+          </div>
+          <div id="listaPagamentos"></div>
+        </div>
+
+        <!-- ===== CHECKLIST DOCUMENTAL GERAL ===== -->
+        <div class="subview" id="sub-documentos">
+          <div class="fin-block-title">Documentos do convênio</div>
+          <div class="fin-block-sub">Documentos do convênio como um todo, sem vínculo com um pagamento específico.</div>
+
+          <div class="fin-card" style="margin-top:18px;">
+            <div class="fin-card-title">Outros documentos</div>
+            <div class="fin-block-sub" style="margin-bottom:10px;">Dê um nome e anexe o arquivo (PDF ou outro). Cada documento lançado entra na listagem abaixo, pronto para baixar.</div>
+            <div class="fin-form-row">
+              <input type="text" id="docExtraNome" placeholder="Nome do documento (ex.: Ofício de resposta ao TCE)" aria-label="Nome do novo documento" />
+              <button class="btn-small" onclick="adicionarDocumentoExtra()">+ Adicionar documento</button>
+            </div>
+            <div class="doc-list" id="docCardsExtras" style="margin-top:14px;"></div>
+          </div>
+        </div>
+
+        <!-- ===== EXTRATO BANCÁRIO MENSAL ===== -->
+        <div class="subview" id="sub-extratos">
+          <div class="fin-block-title">Extrato bancário — lançamento mensal</div>
+          <div class="fin-block-sub">Lançamento mensal do extrato bancário do convênio.</div>
+          <div class="fin-card">
+            <div class="fin-form-row">
+              <input type="month" id="ex_mes" title="Mês de referência" />
+              <input type="text" id="ex_entradas" placeholder="Entradas no mês (R$)" aria-label="Entradas no mês (R$)" />
+              <input type="text" id="ex_saidas" placeholder="Saídas no mês (R$)" aria-label="Saídas no mês (R$)" />
+              <input type="text" id="ex_obs" placeholder="Observação (opcional)" aria-label="Observação (opcional)" />
+              <button class="btn-small" onclick="adicionarExtrato()">Lançar extrato</button>
+            </div>
+            <table class="fin-table">
+              <thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo do mês</th><th>Observação</th><th></th></tr></thead>
+              <tbody id="tabelaExtratos"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== RENDIMENTOS ===== -->
+        <div class="subview" id="sub-rendimentos">
+          <div class="fin-block-title">Extrato de investimento — rendimento mensal</div>
+          <div class="fin-block-sub">Lançamento mensal do rendimento de aplicação do convênio.</div>
+          <div class="fin-card">
+            <div class="fin-form-row">
+              <input type="month" id="rd_mes" title="Mês de referência" />
+              <input type="text" id="rd_aplicado" placeholder="Valor aplicado no mês (R$)" aria-label="Valor aplicado no mês (R$)" />
+              <input type="text" id="rd_rendimento" placeholder="Rendimento do mês (R$)" aria-label="Rendimento do mês (R$)" />
+              <input type="text" id="rd_obs" placeholder="Observação (opcional)" aria-label="Observação (opcional)" />
+              <button class="btn-small" onclick="adicionarRendimento()">Lançar rendimento</button>
+            </div>
+            <table class="fin-table">
+              <thead><tr><th>Mês</th><th>Valor aplicado</th><th>Rendimento do mês</th><th>Observação</th><th></th></tr></thead>
+              <tbody id="tabelaRendimentos"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ===== AUTORIZAÇÃO DE USO DO RENDIMENTO ===== -->
+        <div class="subview" id="sub-autorizacoes">
+          <div class="fin-block-title">Autorização de uso do saldo de rendimento</div>
+          <div class="fin-card">
+            <div id="finAlertAutorizacao"></div>
+            <div class="fin-form-row">
+              <input type="text" id="au_valor" placeholder="Valor a solicitar (R$)" aria-label="Valor a solicitar (R$)" />
+              <input type="text" id="au_finalidade" placeholder="Finalidade da utilização" aria-label="Finalidade da utilização" />
+              <button class="btn-small" onclick="solicitarAutorizacao()">Solicitar autorização ao convenente</button>
+            </div>
+            <table class="fin-table">
+              <thead><tr><th>Data</th><th>Valor solicitado</th><th>Finalidade</th><th>Status</th><th></th></tr></thead>
+              <tbody id="tabelaAutorizacoes"></tbody>
+            </table>
+
+            <div class="fin-card-title" style="margin-top:20px;">Registrar uso do rendimento autorizado</div>
+            <div class="fin-form-row">
+              <select id="us_autorizacao" aria-label="Selecionar autorização vinculada ao uso"></select>
+              <input type="text" id="us_valor" placeholder="Valor utilizado (R$)" aria-label="Valor utilizado (R$)" />
+              <input type="text" id="us_descricao" placeholder="Descrição do uso" aria-label="Descrição do uso" />
+              <button class="btn-small" onclick="registrarUsoRendimento()">Registrar uso</button>
+            </div>
+            <table class="fin-table">
+              <thead><tr><th>Data</th><th>Valor</th><th>Descrição</th><th>Vinculado à autorização</th></tr></thead>
+              <tbody id="tabelaUsosRendimento"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ABA: RELATÓRIOS — PUXA DADOS DA ESTRUTURA UNIFICADA -->
+    <div class="view" id="view-relatorio">
+      <div class="eyebrow">Prestação de contas</div>
+      <h1>Relatórios</h1>
+      <div class="sub">Relatório financeiro por convênio e visão consolidada de todos os instrumentos.</div>
+
+      <div class="report-toolbar">
+        <select id="relatorioConvenioSelect" class="report-select" aria-label="Selecionar convênio para o relatório" onchange="renderRelatorioConvenio()"></select>
+        <button class="btn-ghost btn-small" onclick="window.print()">🖨️ Imprimir / salvar PDF</button>
+        <button class="btn-ghost btn-small" onclick="exportarCSVFinanceiro()">⬇ Exportar CSV do financeiro</button>
+      </div>
+
+      <div id="relatorioConvenioVazio" class="painel-empty hidden">Nenhum convênio cadastrado ainda para gerar relatório.</div>
+      <div id="relatorioConvenioConteudo"></div>
+
+      <hr class="section-divider" />
+
+      <div class="fin-block-title">Relatório geral de convênios</div>
+      <div class="fin-block-sub">Visão consolidada de todos os instrumentos cadastrados nesta pasta de trabalho.</div>
+      <table class="fin-table">
+        <thead><tr><th>Número</th><th>Programa</th><th>Proponente</th><th>Valor</th><th>Saldo total</th><th>Prazo prestação de contas</th></tr></thead>
+        <tbody id="tabelaRelatorioGeral"></tbody>
+      </table>
+    </div>
+
+    <!-- ABA: GESTÃO DE DOCUMENTOS — PUXA DADOS DO CONVÊNIO ATIVO -->
+    <div class="view" id="view-documento">
+      <div class="eyebrow">Documentos técnicos</div>
+      <h1>Gestão de Documentos</h1>
+      <div class="sub">Ferramentas de redação e organização de documentos do convênio. Novas ferramentas serão adicionadas aqui como abas.</div>
+
+      <div class="subtab-bar" role="tablist" aria-label="Ferramentas de Gestão de Documentos">
+        <button class="subtab active" data-subview-doc="justificativa" onclick="mudarSubabaDocumentos('justificativa')">Justificativa do Projeto</button>
+        <button class="subtab" data-subview-doc="ia" onclick="mudarSubabaDocumentos('ia')">Documentos por IA</button>
+      </div>
+
+      <div class="subview active" id="subdoc-justificativa">
+        <div class="alert-box quiet" id="docAutoAlert" style="margin-bottom:16px;">
+          <b>Auto-preenchimento ativo:</b> se um convênio estiver selecionado, os campos abaixo serão preenchidos automaticamente com os dados do cadastro.
+        </div>
+
+        <div class="grid">
+          <div class="field">
+            <label for="doc_municipio">Município</label>
+            <input id="doc_municipio" value="" />
+          </div>
+          <div class="field">
+            <label for="doc_fonte">Fonte do recurso</label>
+            <select id="doc_fonte">
+              <option>FNDE</option>
+              <option>SUDENE</option>
+              <option>COMPESA</option>
+              <option>SEDUH/PE</option>
+              <option>PROMAQ</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="doc_objeto">Objeto do projeto</label>
+            <input id="doc_objeto" value="" />
+          </div>
+          <div class="field">
+            <label for="doc_valor">Valor (R$)</label>
+            <input id="doc_valor" value="" />
+          </div>
+          <div class="field">
+            <label for="doc_bairro">Bairro / localidade específica</label>
+            <input id="doc_bairro" value="" />
+          </div>
+          <div class="field">
+            <label for="doc_numero">Número concreto (vagas, famílias, km, etc.)</label>
+            <input id="doc_numero" value="" />
+          </div>
+          <div class="field full">
+            <label for="doc_situacao">Situação atual x desejada</label>
+            <textarea id="doc_situacao"></textarea>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="gerarBtn" onclick="gerarDocumento()">Gerar Justificativa</button>
+          <button class="btn-ghost" id="preencherAutoBtn" onclick="preencherDoConvenio()">🔄 Preencher do convênio ativo</button>
+          <div class="net-status" id="netStatus"><span class="dot" style="background:var(--line)"></span>aguardando</div>
+        </div>
+
+        <div class="doc-wrap hidden" id="docWrap">
+          <div class="doc-header">
+            <div class="doc-title">Justificativa — rascunho gerado</div>
+            <div class="stamp" id="stamp"></div>
+          </div>
+          <div class="paper" id="paper"></div>
+          <div class="checklist" id="checklist"></div>
+          <div id="errorBox"></div>
+        </div>
+      </div>
+
+      <!-- ===== SUBABA: DOCUMENTOS POR IA (multi-tipo) ===== -->
+      <div class="subview" id="subdoc-ia">
+        <div class="alert-box quiet" id="iaAutoAlert" style="margin-bottom:20px;">
+          <b>Vinculado ao convênio ativo:</b> selecione um convênio no Painel geral para que os documentos gerados aqui fiquem organizados dentro dele.
+        </div>
+
+        <div class="ia-secao-title" style="margin-top:0;">1. Escolha o tipo de documento</div>
+        <div class="tipodoc-grid" id="tipoDocGrid"></div>
+
+        <div class="ia-secao-title">2. Contexto e referências</div>
+        <div class="grid">
+          <div class="field campo-hidden" id="campoDestinatarioIA">
+            <label for="ia_destinatario">Destinatário / órgão</label>
+            <input id="ia_destinatario" placeholder="Ex.: Secretaria de Infraestrutura / SEDUH-PE" />
+          </div>
+          <div class="field">
+            <label for="ia_objeto">Objeto do projeto ou convênio</label>
+            <input id="ia_objeto" value="" />
+          </div>
+          <div class="field">
+            <label for="ia_prazo">Prazo / data limite (opcional)</label>
+            <input type="date" id="ia_prazo" />
+          </div>
+          <div class="field full">
+            <label for="ia_edital_arquivo">Upload de edital ou programa (opcional)</label>
+            <input type="file" id="ia_edital_arquivo" aria-label="Anexar edital ou programa" onchange="processarEditalIA(this.files[0])" />
+            <div class="doc-list-pendente" id="ia_edital_nome" style="margin-top:4px;"></div>
+          </div>
+          <div class="field full">
+            <label for="ia_edital_conteudo">Conteúdo extraído / principais pontos do edital ou programa</label>
+            <textarea id="ia_edital_conteudo" placeholder="Se o arquivo for .txt ou .md, o conteúdo é extraído automaticamente aqui. Para PDF/DOCX, este protótipo não lê o arquivo — cole aqui os trechos principais (objeto, exigências, prazos, valores)."></textarea>
+          </div>
+          <div class="field full">
+            <label for="ia_instrucoes">Instruções adicionais para a IA</label>
+            <textarea id="ia_instrucoes" placeholder="Qualquer informação extra que a IA deve considerar ao redigir o documento."></textarea>
+          </div>
+        </div>
+
+        <div id="blocoSwotIA" class="campo-hidden">
+          <div class="ia-secao-title">3. Análise SWOT (base do Plano de Ação)</div>
+          <div class="swot-grid">
+            <div class="field swot-field forcas">
+              <label for="ia_swot_forcas">Forças</label>
+              <textarea id="ia_swot_forcas" placeholder="Capacidades e pontos fortes do município/equipe para executar o objeto."></textarea>
+            </div>
+            <div class="field swot-field fraquezas">
+              <label for="ia_swot_fraquezas">Fraquezas</label>
+              <textarea id="ia_swot_fraquezas" placeholder="Limitações internas: técnicas, financeiras, de pessoal, de prazo."></textarea>
+            </div>
+            <div class="field swot-field oportunidades">
+              <label for="ia_swot_oportunidades">Oportunidades</label>
+              <textarea id="ia_swot_oportunidades" placeholder="Fatores externos favoráveis: editais, prazos, parcerias, contexto político."></textarea>
+            </div>
+            <div class="field swot-field ameacas">
+              <label for="ia_swot_ameacas">Ameaças</label>
+              <textarea id="ia_swot_ameacas" placeholder="Riscos externos: concorrência por recursos, prazos apertados, mudanças normativas."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="gerarBtnIA" onclick="gerarDocumentoIA()">✨ Gerar com IA</button>
+          <button class="btn-ghost" onclick="preencherContextoIA()">🔄 Preencher do convênio ativo</button>
+          <div class="net-status" id="netStatusIA"><span class="dot" style="background:var(--line)"></span>aguardando</div>
+        </div>
+
+        <div class="doc-wrap hidden" id="docWrapIA">
+          <div class="doc-header">
+            <div class="doc-title">
+              <span id="docTituloIA">Documento gerado</span><span class="status-doc-ia hidden" id="statusDocIA"></span>
+            </div>
+            <div class="stamp" id="stampIA"></div>
+          </div>
+          <div class="paper" id="paperIA"></div>
+          <textarea class="paper-edit hidden" id="paperEditIA"></textarea>
+          <div id="tabela5w2hWrapIA"></div>
+          <div class="checklist" id="checklistIA"></div>
+          <div id="errorBoxIA"></div>
+          <details class="ia-prompt-details">
+            <summary>ver instruções que seriam enviadas à IA</summary>
+            <div class="ia-prompt-box" id="promptIA"></div>
+          </details>
+          <div class="actions" style="margin-top:16px;" id="acoesIANormal">
+            <button class="btn-ghost" onclick="editarDocumentoIA()">✏️ Editar</button>
+            <button class="btn-ghost" onclick="aprovarDocumentoIA()">✅ Aprovar</button>
+            <button class="btn-ghost" onclick="limparDocumentoIA()">🧹 Limpar</button>
+            <button class="btn-ghost" onclick="salvarDocumentoIA()">💾 Salvar na lista do convênio</button>
+            <button class="btn-ghost" onclick="baixarDocumentoIA()">⬇ Baixar (.txt)</button>
+          </div>
+          <div class="actions hidden" style="margin-top:16px;" id="acoesIAEdicao">
+            <button onclick="salvarEdicaoDocumentoIA()">💾 Salvar edição</button>
+            <button class="btn-ghost" onclick="cancelarEdicaoDocumentoIA()">✖ Cancelar</button>
+          </div>
+        </div>
+
+        <div class="ia-secao-title">Documentos gerados neste convênio</div>
+        <div class="doc-list" id="listaDocsIA"></div>
+      </div>
+    </div>
+
+    <!-- ABA: EMENDAS PARLAMENTARES -->
+    <div class="view" id="view-emendas">
+      <div class="eyebrow">Origem do recurso</div>
+      <h1>Emendas Parlamentares</h1>
+      <div class="sub">Indicações de recurso feitas por parlamentares, antes ou independentemente de se tornarem um convênio. Vincule a um convênio já cadastrado quando ele for celebrado.</div>
+
+      <div class="actions" style="margin-top:0;">
+        <button onclick="novaEmenda()">+ Nova emenda</button>
+        <input type="text" id="emendaBusca" placeholder="Buscar por parlamentar, número ou órgão de destino…" oninput="renderEmendas()" style="min-width:280px;" aria-label="Buscar por parlamentar, número ou órgão de destino…" />
+      </div>
+
+      <div id="emendaLista" style="margin-top:24px;"></div>
+
+      <hr class="section-divider" />
+
+      <div class="fin-card" id="emendaFormCard">
+        <div class="fin-card-title" id="emendaFormTitulo">Nova emenda parlamentar</div>
+        <div class="grid">
+          <div class="field">
+            <label for="em_parlamentar">Parlamentar (autor) *</label>
+            <input id="em_parlamentar" placeholder="Ex.: Dep. Fed. Maria Silva" />
+          </div>
+          <div class="field">
+            <label for="em_partido">Partido / UF</label>
+            <input id="em_partido" placeholder="Ex.: PXX/PE" />
+          </div>
+          <div class="field">
+            <label for="em_numero">Número da emenda *</label>
+            <input id="em_numero" placeholder="Ex.: 12345678" />
+          </div>
+          <div class="field">
+            <label for="em_ano">Exercício / ano</label>
+            <input id="em_ano" placeholder="Ex.: 2026" maxlength="4" />
+          </div>
+          <div class="field">
+            <label for="em_valor">Valor indicado (R$) *</label>
+            <input id="em_valor" placeholder="Ex.: 500.000,00" />
+          </div>
+          <div class="field">
+            <label for="em_orgao">Órgão de destino</label>
+            <input id="em_orgao" placeholder="Ex.: FNDE, Ministério da Saúde…" />
+          </div>
+          <div class="field full">
+            <label for="em_objeto">Objeto indicado</label>
+            <input id="em_objeto" placeholder="Ex.: Aquisição de equipamentos para a UBS Central" />
+          </div>
+          <div class="field">
+            <label for="em_situacao">Situação</label>
+            <select id="em_situacao">
+              <option>Indicada</option>
+              <option>Empenhada</option>
+              <option>Conveniada</option>
+              <option>Paga</option>
+              <option>Cancelada</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="em_convenio">Convênio vinculado (opcional)</label>
+            <select id="em_convenio"><option value="">— nenhum vínculo ainda —</option></select>
+          </div>
+          <div class="field full">
+            <label for="em_obs">Observações</label>
+            <textarea id="em_obs" placeholder="Notas de acompanhamento, contatos no gabinete, etc."></textarea>
+          </div>
+        </div>
+        <div class="save-bar">
+          <button onclick="salvarEmenda()">Salvar emenda</button>
+          <button class="btn-ghost" onclick="limparFormularioEmenda()">Limpar formulário</button>
+          <div class="saved-note" id="emendaSavedNote"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
