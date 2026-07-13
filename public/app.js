@@ -17,7 +17,13 @@ const STATE = {
   subView: 'contratadas',
   docSubView: 'justificativa',
   tipoInstrumento: 'convenio',
+  emTipoAtual: 'Convênio',
 };
+
+// Tipos de emenda parlamentar disponíveis
+const TIPOS_EMENDA = ['Pix', 'Transferência Fundo a Fundo', 'Emenda de Bancada', 'Emenda de Comissão', 'Convênio'];
+// Tipos de emenda que exigem vínculo com um Convênio já cadastrado (dados completos do conveniente)
+const TIPOS_EMENDA_COM_CONVENIO = ['Convênio'];
 
 const STORAGE_KEY = 'captagov_v2';
 let _saveTimer = null;
@@ -207,7 +213,7 @@ function mudarDocSubView(sub) {
 
 // ==================== CRUD CONVÊNIOS ====================
 const camposConvenio = [
-  'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_proponente', 'c_cnpj',
+  'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
   'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_telefone', 'c_email',
   'c_responsavel', 'c_cargo', 'c_resp_cpf', 'c_resp_tel', 'c_resp_email',
   'c_tec_nome', 'c_tec_reg', 'c_tec_tel', 'c_tec_email',
@@ -215,7 +221,7 @@ const camposConvenio = [
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
 
-const obrigatorios = ['c_numero', 'c_proponente', 'c_valor', 'c_data_fim'];
+const obrigatorios = ['c_numero', 'c_conveniente', 'c_valor', 'c_data_fim'];
 
 function getFormData() {
   const d = {};
@@ -246,9 +252,12 @@ function editarConvenio(id) {
   STATE.convenioEditandoId = id;
   STATE.convenioAtualId = id;
   STATE.tipoInstrumento = c.tipo || 'convenio';
+  // Compatibilidade com registros antigos: "Federal" agora é "União"; dado antigo de proponente vira conveniente
+  const esferaNormalizada = c.esfera === 'Federal' ? 'União' : (c.esfera === 'Estadual' ? 'Estado' : c.esfera);
   setFormData({
     c_numero: c.numero, c_programa: c.programa, c_orgao: c.orgao,
-    c_esfera: c.esfera, c_natureza: c.natureza, c_proponente: c.proponente,
+    c_esfera: esferaNormalizada, c_natureza: c.natureza,
+    c_conveniente: c.conveniente || c.proponente,
     c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
     c_bairro: c.bairroProp, c_municipio: c.municipioProp,
     c_telefone: c.telefoneInst, c_email: c.emailInst,
@@ -288,7 +297,7 @@ function salvarConvenio() {
   const dados = {
     tipo: STATE.tipoInstrumento,
     numero: form.c_numero, programa: form.c_programa, orgao: form.c_orgao,
-    esfera: form.c_esfera, natureza: form.c_natureza, proponente: form.c_proponente,
+    esfera: form.c_esfera, natureza: form.c_natureza, conveniente: form.c_conveniente,
     cnpj: form.c_cnpj, cep: form.c_cep, logradouro: form.c_logradouro,
     bairroProp: form.c_bairro, municipioProp: form.c_municipio,
     telefoneInst: form.c_telefone, emailInst: form.c_email,
@@ -373,13 +382,17 @@ function editarEmenda(id) {
   const e = STATE.emendas.find(x => x.id === id);
   if (!e) return;
   STATE.emendaEditandoId = id;
-  ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_situacao', 'em_obs'].forEach(k => {
+  STATE.emTipoAtual = e.tipo || 'Convênio';
+  STATE.view = 'emendas';
+  STATE.subView = 'form';
+  renderTudo();
+  // O formulário só existe no DOM após o render acima
+  ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_situacao', 'em_esfera', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
     const el = document.getElementById(k);
     if (el) el.value = e[k.replace('em_', '')] || '';
   });
   const convSel = document.getElementById('em_convenio');
   if (convSel) convSel.value = e.convenioId || '';
-  mudarView('emendas');
 }
 
 function salvarEmenda() {
@@ -396,11 +409,15 @@ function salvarEmenda() {
   const dados = {
     parlamentar,
     partido: document.getElementById('em_partido')?.value || '',
+    esfera: document.getElementById('em_esfera')?.value || 'União',
+    tipo: document.getElementById('em_tipo')?.value || 'Convênio',
     numero, ano: document.getElementById('em_ano')?.value || '',
     valor, orgao: document.getElementById('em_orgao')?.value || '',
     objeto: document.getElementById('em_objeto')?.value || '',
     situacao: document.getElementById('em_situacao')?.value || 'Indicada',
     convenioId: document.getElementById('em_convenio')?.value || null,
+    conveniente_nome: document.getElementById('em_conveniente_nome')?.value || '',
+    conveniente_cnpj: document.getElementById('em_conveniente_cnpj')?.value || '',
     obs: document.getElementById('em_obs')?.value || '',
   };
 
@@ -1085,7 +1102,7 @@ function renderPainel() {
     ? STATE.convenios.filter(c =>
       (c.numero || '').toLowerCase().includes(termo) ||
       (c.programa || '').toLowerCase().includes(termo) ||
-      (c.proponente || '').toLowerCase().includes(termo))
+      (c.conveniente || c.proponente || '').toLowerCase().includes(termo))
     : STATE.convenios;
 
   return `
@@ -1146,7 +1163,7 @@ function renderPainel() {
               <span class="badge ${c.tipo === 'projeto' ? 'badge-info' : 'badge-ok'}">${c.tipo === 'projeto' ? 'Projeto' : 'Convênio'}</span>
               ${escapeHtml(c.numero || 'sem número')} — ${escapeHtml(c.programa || 'Sem programa')}
             </div>
-            <div class="convenio-card-sub">${escapeHtml(c.proponente || 'Proponente não informado')}</div>
+            <div class="convenio-card-sub">${escapeHtml(c.conveniente || c.proponente || 'Conveniente não informado')}</div>
           </div>
           <div class="convenio-card-right">
             <span class="font-mono" style="font-size:14px;">R$ ${escapeHtml(c.valor || '0,00')}</span>
@@ -1193,28 +1210,29 @@ function renderCadastro() {
           <input class="form-input" type="text" id="c_programa" placeholder="Ex: Programa de Aceleração do Crescimento" />
         </div>
         ${ehConvenio ? `
+        <div class="form-section-title">🏛️ Proponente (Concedente do Recurso)</div>
         <div class="form-group">
-          <label class="form-label">Órgão Concedente</label>
-          <input class="form-input" type="text" id="c_orgao" />
+          <label class="form-label">Esfera do Proponente</label>
+          <select class="form-input form-select" id="c_esfera">
+            <option>União</option><option>Estado</option>
+          </select>
         </div>
         <div class="form-group">
-          <label class="form-label">Esfera</label>
-          <select class="form-input form-select" id="c_esfera">
-            <option>Federal</option><option>Estadual</option><option>Municipal</option>
-          </select>
+          <label class="form-label">Órgão / Entidade Proponente</label>
+          <input class="form-input" type="text" id="c_orgao" placeholder="Ex: Ministério da Saúde, Governo do Estado de..." />
+        </div>
+        ` : ''}
+
+        <div class="form-section-title">🏢 Dados do Conveniente (Prefeitura)</div>
+        <div class="form-group">
+          <label class="form-label">Nome / Razão Social <span class="required">*</span></label>
+          <input class="form-input" type="text" id="c_conveniente" placeholder="Ex: Prefeitura Municipal de..." />
         </div>
         <div class="form-group">
           <label class="form-label">Natureza Jurídica</label>
           <select class="form-input form-select" id="c_natureza">
             <option>Prefeitura Municipal</option><option>Autarquia</option><option>Fundação</option><option>Outros</option>
           </select>
-        </div>
-        ` : ''}
-
-        <div class="form-section-title">🏢 Dados do Proponente</div>
-        <div class="form-group">
-          <label class="form-label">Nome / Razão Social <span class="required">*</span></label>
-          <input class="form-input" type="text" id="c_proponente" />
         </div>
         <div class="form-group">
           <label class="form-label">CNPJ</label>
@@ -1766,7 +1784,7 @@ function renderRelatorios() {
       <div class="card-title" style="font-size:16px;">Relatório Geral — Todos os Convênios</div>
       <div class="table-wrapper" style="margin-top:16px;">
         <table>
-          <thead><tr><th>Convênio</th><th>Programa</th><th>Proponente</th><th>Valor</th><th>Saldo</th><th>PC até</th></tr></thead>
+          <thead><tr><th>Convênio</th><th>Programa</th><th>Conveniente</th><th>Valor</th><th>Saldo</th><th>PC até</th></tr></thead>
           <tbody>
             ${STATE.convenios.map(cv => {
               const res = calcularResumoFinanceiro(cv.id);
@@ -1774,7 +1792,7 @@ function renderRelatorios() {
               return `<tr>
                 <td><strong>${escapeHtml(cv.numero || '?')}</strong></td>
                 <td>${escapeHtml(cv.programa || '—')}</td>
-                <td>${escapeHtml(cv.proponente || '—')}</td>
+                <td>${escapeHtml(cv.conveniente || cv.proponente || '—')}</td>
                 <td class="font-mono">${formatMoeda(res ? res.valor : 0)}</td>
                 <td class="font-mono ${saldoClass}">${formatMoeda(res ? res.saldoTotal : 0)}</td>
                 <td>${escapeHtml(cv.prazoLimitePC || '—')}</td>
@@ -1793,7 +1811,7 @@ function renderRelatorioFinanceiro(c) {
   return `
     <div class="card">
       <div class="card-title" style="font-size:18px;">${escapeHtml(c.numero || '?')} — ${escapeHtml(c.programa || '')}</div>
-      <div class="card-subtitle">Proponente: ${escapeHtml(c.proponente || '?')} · Valor: ${formatMoeda(resumo.valor)}</div>
+      <div class="card-subtitle">Conveniente: ${escapeHtml(c.conveniente || c.proponente || '?')} · Valor: ${formatMoeda(resumo.valor)}</div>
 
       <div class="fin-summary-grid">
         <div class="fin-summary-card"><div class="fin-summary-label">Movimento Extrato</div><div class="fin-summary-value ${resumo.movExtrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.movExtrato)}</div></div>
@@ -1874,15 +1892,18 @@ function renderEmendaLista() {
     ? '<div class="empty-state"><div class="empty-state-icon">🏛️</div><div class="empty-state-title">Nenhuma emenda cadastrada</div></div>'
     : lista.slice().reverse().map(e => {
       const conv = e.convenioId ? STATE.convenios.find(cv => cv.id === e.convenioId) : null;
+      const conveniente = conv ? (conv.conveniente || conv.proponente) : e.conveniente_nome;
       const situacaoClass = e.situacao === 'Paga' || e.situacao === 'Conveniada' ? 'badge-ok' : e.situacao === 'Empenhada' ? 'badge-warn' : 'badge-info';
       return `
         <div class="convenio-card" style="margin-bottom:8px;">
           <div>
             <div class="convenio-card-title">${escapeHtml(e.parlamentar || '?')} <span style="color:var(--gray-400);font-weight:400;">— nº ${escapeHtml(e.numero || '?')}${e.ano ? '/' + escapeHtml(e.ano) : ''}</span></div>
-            <div class="convenio-card-sub">${escapeHtml(e.objeto || 'Objeto não informado')}${e.orgao ? ' · ' + escapeHtml(e.orgao) : ''}</div>
+            <div class="convenio-card-sub">${escapeHtml(e.objeto || 'Objeto não informado')}${e.orgao ? ' · ' + escapeHtml(e.orgao) : ''}${conveniente ? ' · Conveniente: ' + escapeHtml(conveniente) : ''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
             <span class="font-mono" style="font-size:14px;">R$ ${escapeHtml(e.valor || '0,00')}</span>
+            <span class="badge badge-info">${escapeHtml(e.esfera || 'União')}</span>
+            <span class="badge badge-info">${escapeHtml(e.tipo || 'Convênio')}</span>
             ${conv ? `<span class="badge badge-info">Vinc: ${escapeHtml(conv.numero || '?')}</span>` : ''}
             <span class="badge ${situacaoClass}">${escapeHtml(e.situacao || '?')}</span>
             <button class="btn btn-ghost btn-sm" onclick="editarEmenda('${e.id}')">Editar</button>
@@ -1894,13 +1915,32 @@ function renderEmendaLista() {
   `;
 }
 
+function mudarTipoEmenda(valor) {
+  STATE.emTipoAtual = valor;
+  renderTudo();
+}
+
 function renderEmendaForm() {
+  const tipo = STATE.emTipoAtual || 'Convênio';
+  const exigeConvenio = TIPOS_EMENDA_COM_CONVENIO.includes(tipo);
   return `
     <div class="card-title" style="font-size:16px;">${STATE.emendaEditandoId ? 'Editar' : 'Nova'} Emenda Parlamentar</div>
     <div id="emendaNote"></div>
     <div class="form-grid" style="margin-top:16px;">
       <div class="form-group"><label class="form-label">Parlamentar <span class="required">*</span></label><input class="form-input" id="em_parlamentar" /></div>
       <div class="form-group"><label class="form-label">Partido</label><input class="form-input" id="em_partido" /></div>
+      <div class="form-group">
+        <label class="form-label">Esfera <span class="required">*</span></label>
+        <select class="form-input form-select" id="em_esfera">
+          <option>União</option><option>Estadual</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tipo de Emenda <span class="required">*</span></label>
+        <select class="form-input form-select" id="em_tipo" onchange="mudarTipoEmenda(this.value)">
+          ${TIPOS_EMENDA.map(t => `<option ${t === tipo ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </div>
       <div class="form-group"><label class="form-label">Nº Emenda <span class="required">*</span></label><input class="form-input" id="em_numero" /></div>
       <div class="form-group"><label class="form-label">Ano</label><input class="form-input" id="em_ano" /></div>
       <div class="form-group"><label class="form-label">Valor (R$) <span class="required">*</span></label><input class="form-input" id="em_valor" oninput="mascararValor(this)" inputmode="numeric" /></div>
@@ -1912,13 +1952,29 @@ function renderEmendaForm() {
           <option>Indicada</option><option>Empenhada</option><option>Paga</option><option>Conveniada</option><option>Cancelada</option>
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label">Vincular a Convênio</label>
+
+      ${exigeConvenio ? `
+      <div class="form-section-title">🏢 Conveniente</div>
+      <div class="form-group full-width">
+        <label class="form-label">Vincular a Convênio Cadastrado</label>
         <select class="form-input form-select" id="em_convenio">
           <option value="">— nenhum —</option>
-          ${STATE.convenios.map(cv => `<option value="${cv.id}">${escapeHtml(cv.numero || '?')} — ${escapeHtml(cv.programa || '')}</option>`).join('')}
+          ${STATE.convenios.map(cv => `<option value="${cv.id}">${escapeHtml(cv.numero || '?')} — ${escapeHtml(cv.conveniente || cv.proponente || '')}</option>`).join('')}
         </select>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Selecione o convênio já cadastrado; os dados da prefeitura (conveniente) serão obtidos automaticamente do cadastro.</div>
       </div>
+      ` : `
+      <div class="form-section-title">🏢 Conveniente (Beneficiário direto)</div>
+      <div class="form-group">
+        <label class="form-label">Nome do Conveniente / Prefeitura</label>
+        <input class="form-input" id="em_conveniente_nome" placeholder="Ex: Prefeitura Municipal de..." />
+      </div>
+      <div class="form-group">
+        <label class="form-label">CNPJ do Conveniente</label>
+        <input class="form-input" id="em_conveniente_cnpj" maxlength="18" oninput="mascararCNPJ(this)" placeholder="00.000.000/0000-00" />
+      </div>
+      `}
+
       <div class="form-group full-width"><label class="form-label">Observações</label><input class="form-input" id="em_obs" /></div>
     </div>
     <div style="margin-top:16px;display:flex;gap:12px;">
@@ -1929,12 +1985,17 @@ function renderEmendaForm() {
 }
 
 function limparFormEmenda() {
-  ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_obs'].forEach(k => {
+  ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
     const el = document.getElementById(k);
     if (el) el.value = '';
   });
   const sel = document.getElementById('em_situacao');
   if (sel) sel.value = 'Indicada';
+  const esf = document.getElementById('em_esfera');
+  if (esf) esf.value = 'União';
+  STATE.emTipoAtual = 'Convênio';
+  const tp = document.getElementById('em_tipo');
+  if (tp) tp.value = 'Convênio';
 }
 
 function limparFormConvenio() {
@@ -1942,10 +2003,11 @@ function limparFormConvenio() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
-  document.getElementById('c_esfera').value = 'Federal';
-  document.getElementById('c_natureza').value = 'Prefeitura Municipal';
-  document.getElementById('c_cargo').value = 'Prefeito(a) Municipal';
-  document.getElementById('c_prazo_pc').value = '60';
+  const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  setVal('c_esfera', 'União');
+  setVal('c_natureza', 'Prefeitura Municipal');
+  setVal('c_cargo', 'Prefeito(a) Municipal');
+  setVal('c_prazo_pc', '60');
 }
 
 // ==================== REMOÇÕES ====================
@@ -2044,7 +2106,7 @@ function gerarPDFRelatorio() {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...GRAY);
-  doc.text('Programa: ' + (c.programa || '—') + '  |  Proponente: ' + (c.proponente || '—'), M, y);
+  doc.text('Programa: ' + (c.programa || '—') + '  |  Conveniente: ' + (c.conveniente || c.proponente || '—'), M, y);
   y += 6;
   doc.text('Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '  |  PC até: ' + (c.prazoLimitePC || '—'), M, y);
 
