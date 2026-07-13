@@ -505,6 +505,7 @@ async function registrarPagamento() {
     contratadaId, valor, data: document.getElementById('pg_data')?.value || '',
     status: 'pendente',
     docs: docsVaziosPagamento(),
+    historico: [{ status: 'pendente', quando: new Date().toISOString() }],
     obs: document.getElementById('pg_obs')?.value || '',
   });
   salvarEstado();
@@ -525,6 +526,8 @@ function togglePagamentoStatus(id) {
     if ((semINSS || semTributos) && !confirm('Este pagamento ainda não tem comprovante de INSS e/ou quitação de tributos no checklist. Deseja marcar como fechado mesmo assim?')) return;
   }
   pg.status = pg.status === 'pendente' ? 'fechado' : 'pendente';
+  if (!pg.historico) pg.historico = [];
+  pg.historico.push({ status: pg.status, quando: new Date().toISOString() });
   salvarEstado();
   renderFinanceiro();
 }
@@ -1022,7 +1025,6 @@ function renderSidebar() {
     <div class="sidebar-footer">
       <div style="margin-bottom:8px;">
         <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarDados()">⬇ Exportar Backup (JSON)</button>
-        <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarAnexosZIP()">📦 Exportar Anexos (ZIP)</button>
         <label class="btn btn-secondary btn-sm" style="width:100%;display:block;text-align:center;">
           ⬆ Importar Backup
           <input type="file" accept=".json" style="display:none" onchange="importarDados(this.files[0])" />
@@ -1753,6 +1755,7 @@ function renderRelatorios() {
       </div>
       <button class="btn btn-primary" onclick="gerarPDFRelatorio()">📥 Gerar PDF</button>
       <button class="btn btn-secondary" onclick="exportarCSVFinanceiro()">📊 Exportar CSV</button>
+      <button class="btn btn-secondary" onclick="exportarAnexosZIP()">📦 Exportar Tudo (ZIP)</button>
     </div>
 
     ${!c ? '<div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">Selecione um convênio</div><div class="empty-state-text">Escolha um convênio acima para visualizar os relatórios.</div></div>' : `
@@ -2046,6 +2049,29 @@ function gerarPDFRelatorio() {
   doc.text('Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '  |  PC até: ' + (c.prazoLimitePC || '—'), M, y);
 
   y += 14;
+  // Dados cadastrais completos
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Dados do Convênio', M, y);
+  y += 7;
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(51, 65, 85);
+  const linhasCadastro = [
+    'Órgão: ' + (c.orgao || '—') + '   |   Esfera: ' + (c.esfera || '—') + '   |   Natureza: ' + (c.natureza || '—'),
+    'CNPJ: ' + (c.cnpj || '—') + '   |   Endereço: ' + (c.logradouro || '—') + ', ' + (c.bairroProp || '—') + ' — ' + (c.municipioProp || '—'),
+    'Contato institucional: ' + (c.telefoneInst || '—') + '   |   ' + (c.emailInst || '—'),
+    'Responsável: ' + (c.responsavel || '—') + ' (' + (c.cargo || '—') + ')   |   CPF: ' + (c.responsavelCpf || '—'),
+    'Contato do responsável: ' + (c.responsavelTelefone || '—') + '   |   ' + (c.responsavelEmail || '—'),
+    'Técnico responsável: ' + (c.tecnicoNome || '—') + '   |   Registro: ' + (c.tecnicoRegistro || '—'),
+    'Contato do técnico: ' + (c.tecnicoTelefone || '—') + '   |   ' + (c.tecnicoEmail || '—'),
+    'Banco/Conta: ' + (c.banco || '—') + ' / ' + (c.conta || '—') + '   |   Contrapartida: ' + (c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : '—'),
+    'Assinatura: ' + (c.dataAssinatura || '—') + '   |   Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '   |   PC até: ' + (c.prazoLimitePC || '—'),
+  ];
+  linhasCadastro.forEach(linha => { doc.text(linha, M, y); y += 5; });
+
+  y += 6;
   // Cards resumo
   doc.setFillColor(241, 245, 249);
   doc.roundedRect(M, y, W - 2 * M, 30, 3, 3, 'F');
@@ -2070,18 +2096,43 @@ function gerarPDFRelatorio() {
 
   y += 40;
 
+  // Contratadas
+  if (fin.contratadas && fin.contratadas.length > 0) {
+    if (y > 240) { doc.addPage(); y = 20; }
+    doc.setTextColor(...NAVY);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Contratadas', M, y);
+    y += 6;
+
+    doc.autoTable({
+      head: [['Razão Social', 'CNPJ', 'Nº Contrato', 'Valor Contrato']],
+      body: fin.contratadas.map(ct => [ct.razaoSocial || '—', ct.cnpj || '—', ct.numeroContrato || '—', formatMoeda(parseMoeda(ct.valorContrato || '0'))]),
+      startY: y,
+      headStyles: { fillColor: TEAL, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      bodyStyles: { fontSize: 9, textColor: [51, 65, 85] },
+      alternateRowStyles: { fillColor: [241, 245, 249] },
+      margin: { left: M, right: M },
+      theme: 'grid',
+    });
+    y = doc.lastAutoTable.finalY + 10;
+  }
+
   // Pagamentos
   if (fin.pagamentos && fin.pagamentos.length > 0) {
+    if (y > 240) { doc.addPage(); y = 20; }
     doc.setTextColor(...NAVY);
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Pagamentos às Contratadas', M, y);
     y += 6;
 
-    const headers = [['Nº', 'Contratada', 'Data', 'Valor', 'Status']];
+    const headers = [['Nº', 'Contratada', 'Data', 'Valor', 'Status', 'Documentos']];
     const rows = fin.pagamentos.map(p => {
       const ct = (fin.contratadas || []).find(x => x.id === p.contratadaId);
-      return [String(p.numero), ct ? ct.razaoSocial : '?', p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—', formatMoeda(p.valor), p.status];
+      const docsObj = p.docs || {};
+      const docsAnexados = CATEGORIAS_DOC_PAGAMENTO.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
+      return [String(p.numero), ct ? ct.razaoSocial : '?', p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—', formatMoeda(p.valor), p.status, docsAnexados + '/' + CATEGORIAS_DOC_PAGAMENTO.length];
     });
 
     doc.autoTable({
@@ -2093,6 +2144,33 @@ function gerarPDFRelatorio() {
       theme: 'grid',
     });
     y = doc.lastAutoTable.finalY + 10;
+
+    // Histórico de status dos pagamentos
+    const historicoRows = [];
+    fin.pagamentos.forEach(p => {
+      (p.historico || []).forEach(h => {
+        historicoRows.push([String(p.numero), h.status, new Date(h.quando).toLocaleString('pt-BR')]);
+      });
+    });
+    if (historicoRows.length > 0) {
+      if (y > 240) { doc.addPage(); y = 20; }
+      doc.setTextColor(...NAVY);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Histórico de Status dos Pagamentos', M, y);
+      y += 6;
+      doc.autoTable({
+        head: [['Pagamento nº', 'Status', 'Quando']],
+        body: historicoRows,
+        startY: y,
+        headStyles: { fillColor: GRAY, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9, textColor: [51, 65, 85] },
+        alternateRowStyles: { fillColor: [241, 245, 249] },
+        margin: { left: M, right: M },
+        theme: 'grid',
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    }
   }
 
   // Extratos
