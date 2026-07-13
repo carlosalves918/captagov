@@ -43,7 +43,7 @@
 
   .app{
     display:grid;
-    grid-template-columns:272px 1fr;
+    grid-template-columns:296px 1fr;
     min-height:100vh;
   }
 
@@ -64,31 +64,31 @@
   }
   .seal-emblem{
     flex:none;
-    width:36px; height:36px;
-    border-radius:9px;
+    width:42px; height:42px;
+    border-radius:10px;
     display:flex; align-items:center; justify-content:center;
     font-family:'Source Serif 4', serif;
     font-weight:700;
-    font-size:13.5px;
+    font-size:15.5px;
     letter-spacing:0.01em;
     color:var(--ink);
     background:#EDEFF3;
   }
   .brand{
     font-family:'Source Serif 4', serif;
-    font-weight:600;
-    font-size:19px;
+    font-weight:700;
+    font-size:23px;
     letter-spacing:-0.01em;
     line-height:1.15;
   }
   .brand small{
     display:block;
     font-family:'IBM Plex Mono', monospace;
-    font-weight:400;
-    font-size:9.5px;
-    letter-spacing:0.1em;
-    color:#8A93AC;
-    margin-top:5px;
+    font-weight:500;
+    font-size:11px;
+    letter-spacing:0.09em;
+    color:#A7AFC4;
+    margin-top:6px;
     text-transform:uppercase;
   }
   .sidebar-rule{
@@ -99,14 +99,15 @@
   }
   .sidebar-counter{
     font-family:'IBM Plex Mono', monospace;
-    font-size:10.5px;
+    font-size:12.5px;
     letter-spacing:0.05em;
-    color:#8A93AC;
+    color:#A7AFC4;
     display:flex;
     align-items:baseline;
     gap:6px;
   }
-  .sidebar-counter b{color:#EDEFF3; font-size:13px; font-weight:600;}
+  .sidebar-counter b{color:#EDEFF3; font-size:15px; font-weight:700;}
+
 
   .folder-tabs{
     display:flex;
@@ -117,25 +118,25 @@
   .tab{
     display:flex;
     align-items:center;
-    gap:10px;
-    padding:10px 12px;
+    gap:12px;
+    padding:13px 14px;
     border-radius:var(--radius-sm);
-    font-size:13px;
-    font-weight:500;
-    color:#9AA3B8;
+    font-size:16px;
+    font-weight:600;
+    color:#C7CCDC;
     cursor:default;
     transition:background 0.15s ease, color 0.15s ease;
   }
   .tab[data-view]{cursor:pointer;}
-  .tab[data-view]:hover{background:rgba(255,255,255,0.06); color:#fff;}
+  .tab[data-view]:hover{background:rgba(255,255,255,0.08); color:#fff;}
   .tab.active{
     background:#fff;
     color:var(--ink);
-    font-weight:600;
+    font-weight:700;
   }
-  .tab.stub{opacity:0.45;}
+  .tab.stub{opacity:0.5;}
   .tab.stub:hover{background:transparent;}
-  .tab.stub::after{content:'em breve';font-family:'IBM Plex Mono', monospace;font-size:8.5px;margin-left:auto;text-transform:uppercase;letter-spacing:0.06em;color:#6C7690;}
+  .tab.stub::after{content:'em breve';font-family:'IBM Plex Mono', monospace;font-size:9.5px;margin-left:auto;text-transform:uppercase;letter-spacing:0.06em;color:#8A93AC;}
 
   .sidebar-divider{border:none;border-top:1px solid rgba(255,255,255,0.08);margin:8px 0 4px;}
 
