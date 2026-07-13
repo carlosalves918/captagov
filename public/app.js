@@ -1230,7 +1230,7 @@ function renderPagamentos(fin){
           '</div>';
       }
       // Suprimir input de arquivo quando pagamento está fechado
-      const inputFileHtml = p.status === 'fechado' ? '' : '<input type="file" onchange="anexarDocPagamento(\'" + p.id + '\',\'" + cat.id + '\', this.files[0])" />';
+      const inputFileHtml = p.status === 'fechado' ? '' : '<input type="file" onchange="anexarDocPagamento(\'' + p.id + '\', \'' + cat.id + '\', this.files[0])" />';
       return '<div class="pagdoc-card ' + (item.anexado ? 'ok' : '') + '">' +
         '<div class="pagdoc-title"><span>' + cat.nome + '</span><span class="status-badge ' + (item.anexado ? 'autorizado' : 'pendente') + '">' + (item.anexado ? 'anexado' : 'pendente') + '</span></div>' +
         inputFileHtml +
@@ -1245,8 +1245,8 @@ function renderPagamentos(fin){
       '</div>' +
       '<div class="pagamento-meta">' + new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') + ' · ' + formatMoeda(p.valor) + (p.descricao ? ' · ' + escapeHtml(p.descricao) : '') + '</div>' +
       '<div class="fin-action-row">' +
-        '<button class="btn-ghost btn-small" onclick="alternarStatusPagamento(\'" + p.id + '\')" >' + (p.status === 'aberto' ? 'marcar como fechado' : 'reabrir pagamento') + '</button>' +
-        '<button class="btn-ghost btn-small" onclick="removerPagamento(\'" + p.id + '\')" >remover pagamento</button>' +
+        '<button class="btn-ghost btn-small" onclick="alternarStatusPagamento(\'' + p.id + '\')">' + (p.status === 'aberto' ? 'marcar como fechado' : 'reabrir pagamento') + '</button>' +
+        '<button class="btn-ghost btn-small" onclick="removerPagamento(\'' + p.id + '\')">remover pagamento</button>' +
       '</div>' +
       '<div class="pagamento-docs">' + docsHtml + '</div>';
     wrap.appendChild(card);
