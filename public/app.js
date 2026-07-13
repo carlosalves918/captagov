@@ -1072,9 +1072,10 @@ function renderSidebar() {
   ];
   el.innerHTML = `
     <div class="sidebar-header">
-      <div class="sidebar-logo">
+      <div class="sidebar-logo-panel">
         <img src="/logo.png" alt="CaptaGov" class="sidebar-logo-img" />
       </div>
+      <div class="sidebar-slogan">Conectando projetos a recursos.<br />Transformando municípios.</div>
     </div>
     <nav class="sidebar-nav">
       ${items.map(i => `
