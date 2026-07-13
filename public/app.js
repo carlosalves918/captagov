@@ -479,7 +479,7 @@ async function registrarPagamento() {
     id: gerarId('pg'), numero: c.financeiro.pagamentos.length + 1,
     contratadaId, valor, data: document.getElementById('pg_data')?.value || '',
     status: 'pendente',
-    docs: {},
+    docs: docsVaziosPagamento(),
     anexos: anexos,
     obs: document.getElementById('pg_obs')?.value || '',
   });
@@ -494,9 +494,94 @@ function togglePagamentoStatus(id) {
   if (!c) return;
   const pg = (c.financeiro.pagamentos || []).find(p => p.id === id);
   if (!pg) return;
+  if (pg.status === 'pendente') {
+    const docs = pg.docs || {};
+    const semINSS = !docs.inss || !docs.inss.anexado;
+    const semTributos = !docs.tributos || !docs.tributos.anexado;
+    if ((semINSS || semTributos) && !confirm('Este pagamento ainda não tem comprovante de INSS e/ou quitação de tributos no checklist. Deseja marcar como fechado mesmo assim?')) return;
+  }
   pg.status = pg.status === 'pendente' ? 'fechado' : 'pendente';
   salvarEstado();
   renderFinanceiro();
+}
+
+// ==================== PAGAMENTOS - CHECKLIST DE DOCUMENTOS ====================
+function togglePagamentoDocs(pagamentoId) {
+  const container = document.getElementById('pagamentoDocsContainer');
+  if (!container) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
+  if (!pg) return;
+  if (!pg.docs) pg.docs = docsVaziosPagamento();
+
+  container.innerHTML = `
+    <div style="margin-top:12px;padding:16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
+      <div style="font-size:13px;color:var(--gray-600);margin-bottom:12px;font-weight:600;">Checklist de Documentos — Pagamento nº ${pg.numero}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
+        ${CATEGORIAS_DOC_PAGAMENTO.map(cat => {
+          const item = pg.docs[cat.id] || { anexado: false, arquivo: null, arquivoDataUrl: null };
+          return `
+            <div style="background:var(--white);border:1px solid ${item.anexado ? 'var(--green-300)' : 'var(--gray-200)'};border-radius:var(--radius-sm);padding:10px 12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px;">
+                <span style="font-size:12.5px;font-weight:500;color:var(--navy-900);">${escapeHtml(cat.nome)}</span>
+                <span class="badge ${item.anexado ? 'badge-ok' : 'badge-warn'}" style="font-size:10px;">${item.anexado ? 'anexado' : 'pendente'}</span>
+              </div>
+              ${item.anexado
+                ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                    <span style="font-size:12px;color:var(--gray-500);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 ${escapeHtml(item.arquivo || '')}</span>
+                    <div style="display:flex;gap:4px;flex-shrink:0;">
+                      ${item.arquivoDataUrl ? `<a href="${item.arquivoDataUrl}" download="${escapeHtml(item.arquivo)}" class="btn btn-ghost btn-sm" style="padding:2px 6px;">⬇</a>` : ''}
+                      <button class="btn btn-ghost btn-sm" style="padding:2px 6px;color:var(--danger);" onclick="removerDocPagamento('${pg.id}','${cat.id}')">✕</button>
+                    </div>
+                  </div>`
+                : (pg.status === 'fechado'
+                    ? '<span style="font-size:11px;color:var(--gray-400);">pagamento fechado</span>'
+                    : `<input type="file" style="font-size:11px;width:100%;" onchange="anexarDocPagamento('${pg.id}','${cat.id}',this.files[0])" />`)
+              }
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+function anexarDocPagamento(pagamentoId, catId, file) {
+  if (!file || !STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
+  if (!pg) return;
+  if (!pg.docs) pg.docs = docsVaziosPagamento();
+  if (!pg.docs[catId]) pg.docs[catId] = { anexado: false, arquivo: null, arquivoDataUrl: null };
+  const reader = new FileReader();
+  reader.onload = function () {
+    pg.docs[catId].anexado = true;
+    pg.docs[catId].arquivo = file.name;
+    pg.docs[catId].arquivoDataUrl = reader.result;
+    salvarEstado();
+    togglePagamentoDocs(pagamentoId);
+  };
+  reader.onerror = function () {
+    pg.docs[catId].anexado = true;
+    pg.docs[catId].arquivo = file.name;
+    pg.docs[catId].arquivoDataUrl = null;
+    salvarEstado();
+    togglePagamentoDocs(pagamentoId);
+  };
+  reader.readAsDataURL(file);
+}
+
+function removerDocPagamento(pagamentoId, catId) {
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
+  if (!pg || !pg.docs || !pg.docs[catId]) return;
+  const cat = CATEGORIAS_DOC_PAGAMENTO.find(x => x.id === catId);
+  if (!confirm('Remover o anexo "' + (cat ? cat.nome : catId) + '" deste pagamento?')) return;
+  pg.docs[catId] = { anexado: false, arquivo: null, arquivoDataUrl: null };
+  salvarEstado();
+  togglePagamentoDocs(pagamentoId);
 }
 
 function togglePagamentoAnexos(pagamentoId) {
@@ -684,6 +769,30 @@ const CATEGORIAS_DOC = [
   { id: 'extrato', nome: 'Extrato Bancário' },
 ];
 
+// ==================== CHECKLIST DOCUMENTAL POR PAGAMENTO ====================
+// Cada pagamento carrega seu próprio checklist de documentos comprobatórios,
+// independente do upload genérico de "anexos" (que continua existindo).
+const CATEGORIAS_DOC_PAGAMENTO = [
+  { id: 'empenho', nome: 'Nota de Empenho' },
+  { id: 'medicao', nome: 'Medição ou Ordem de Compra' },
+  { id: 'notaFiscal', nome: 'Nota Fiscal' },
+  { id: 'notaLiquidacao', nome: 'Nota de Liquidação' },
+  { id: 'notaPagamento', nome: 'Nota de Pagamento' },
+  { id: 'comprovantePagamento', nome: 'Comprovante de Pagamento ao Fornecedor' },
+  { id: 'memoria', nome: 'Memória de Cálculo' },
+  { id: 'fotografico', nome: 'Relatório Fotográfico' },
+  { id: 'certidoes', nome: 'Certidões' },
+  { id: 'inss', nome: 'Comprovante INSS' },
+  { id: 'iss', nome: 'Comprovante de ISS' },
+  { id: 'tributos', nome: 'Quitação de Tributos' },
+];
+
+function docsVaziosPagamento() {
+  const est = {};
+  CATEGORIAS_DOC_PAGAMENTO.forEach(c => { est[c.id] = { anexado: false, arquivo: null, arquivoDataUrl: null }; });
+  return est;
+}
+
 function adicionarDocExtra() {
   if (!STATE.convenioAtualId) return;
   const nome = document.getElementById('docExtraNome')?.value.trim();
@@ -808,6 +917,15 @@ async function exportarAnexosZIP() {
       if (a.dataUrl) {
         const base64 = a.dataUrl.split(',')[1];
         pastaPagamentos.file(`pag${pg.numero}_${a.nome}`, base64, { base64: true });
+        count++;
+      }
+    });
+    // Checklist de documentos por categoria do pagamento
+    CATEGORIAS_DOC_PAGAMENTO.forEach(cat => {
+      const item = pg.docs && pg.docs[cat.id];
+      if (item && item.anexado && item.arquivoDataUrl) {
+        const base64 = item.arquivoDataUrl.split(',')[1];
+        pastaPagamentos.file(`pag${pg.numero}/${cat.nome}_${item.arquivo || cat.id}`, base64, { base64: true });
         count++;
       }
     });
@@ -1350,11 +1468,14 @@ function renderPagamentos(c, resumo) {
     ${fin.pagamentos && fin.pagamentos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th>Anexos</th><th></th></tr></thead>
+          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th>Anexos</th><th>Checklist Docs</th><th></th></tr></thead>
           <tbody>
             ${fin.pagamentos.map(p => {
               const ct = contratadas.find(x => x.id === p.contratadaId);
               const anexosCount = (p.anexos || []).length;
+              const docsObj = p.docs || {};
+              const docsTotal = CATEGORIAS_DOC_PAGAMENTO.length;
+              const docsAnexados = CATEGORIAS_DOC_PAGAMENTO.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
               return `<tr>
                 <td>${p.numero}</td>
                 <td>${escapeHtml(ct ? ct.razaoSocial : '?')}</td>
@@ -1372,6 +1493,11 @@ function renderPagamentos(c, resumo) {
                     <button class="btn btn-ghost btn-sm" onclick="togglePagamentoAnexos('${p.id}')" title="Ver anexos">👁️</button>`
                     : '<span style="color:var(--gray-400);font-size:13px;">—</span>'}
                 </td>
+                <td style="text-align:center;">
+                  <button class="btn btn-ghost btn-sm" onclick="togglePagamentoDocs('${p.id}')" title="Checklist de documentos do pagamento">
+                    📁 ${docsAnexados}/${docsTotal}
+                  </button>
+                </td>
                 <td><button class="btn btn-ghost btn-sm" onclick="removerPagamento('${p.id}')">Remover</button></td>
               </tr>`;
             }).join('')}
@@ -1379,6 +1505,7 @@ function renderPagamentos(c, resumo) {
         </table>
       </div>
       <div id="pagamentoAnexosContainer"></div>
+      <div id="pagamentoDocsContainer"></div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum pagamento registrado.</div>'}
   `;
 }
