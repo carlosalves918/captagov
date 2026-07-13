@@ -905,16 +905,20 @@ function renderDocCardsExtras(c){
     item.className = 'doc-list-item' + (doc.anexado ? ' pronto' : '');
 
     let acaoHtml;
+    let nomeArquivoHtml = '';
     if(doc.anexado && doc.arquivoDataUrl){
       acaoHtml = '<a class="doc-list-download" href="'+doc.arquivoDataUrl+'" target="_blank" rel="noopener" download="'+escapeHtml(doc.arquivo)+'">⬇ baixar</a>';
+      nomeArquivoHtml = '<span class="doc-filename-info" style="font-size:0.9em; opacity:0.8; margin-top:4px; display:block;">📎 ' + escapeHtml(doc.arquivo) + '</span>';
     } else if(doc.anexado){
       acaoHtml = '<span class="doc-list-pendente" style="opacity:0.8;">📎 '+escapeHtml(doc.arquivo)+' (conteúdo não salvo)</span>';
+      nomeArquivoHtml = '';
     } else {
       acaoHtml = '<div class="doc-list-attach"><input type="file" aria-label="Anexar arquivo de '+escapeHtml(doc.nome)+'" onchange="anexarDocExtra(\''+doc.id+'\', this.files[0])" /></div>';
     }
 
     item.innerHTML = `
       <div class="doc-list-name">${escapeHtml(doc.nome)}</div>
+      ${nomeArquivoHtml}
       ${acaoHtml}
       <button class="btn-ghost btn-small" onclick="removerDocumentoExtra('${doc.id}')">remover</button>
     `;
@@ -1216,18 +1220,20 @@ function renderPagamentos(fin){
         arquivoInfoHtml =
           '<div class="pagdoc-filename-row">' +
             '<a class="doc-list-download" href="'+item.arquivoDataUrl+'" target="_blank" rel="noopener" download="'+escapeHtml(item.arquivo)+'">⬇ baixar</a>' +
-            '<button type="button" class="btn-ghost btn-small" onclick="removerDocPagamento(\''+p.id+'\',\''+cat.id+'\')">remover</button>' +
+            '<button type="button" class="btn-ghost btn-small" onclick="removerDocPagamento(\''+p.id+'\',\''+cat.id+'\')" >remover</button>' +
           '</div>';
       } else if(item.anexado){
         arquivoInfoHtml =
           '<div class="pagdoc-filename-row">' +
             '<span class="pagdoc-filename">📎 ' + escapeHtml(item.arquivo) + ' (conteúdo não salvo)</span>' +
-            '<button type="button" class="btn-ghost btn-small" onclick="removerDocPagamento(\''+p.id+'\',\''+cat.id+'\')">remover</button>' +
+            '<button type="button" class="btn-ghost btn-small" onclick="removerDocPagamento(\''+p.id+'\',\''+cat.id+'\')" >remover</button>' +
           '</div>';
       }
+      // Suprimir input de arquivo quando pagamento está fechado
+      const inputFileHtml = p.status === 'fechado' ? '' : '<input type="file" onchange="anexarDocPagamento(\'" + p.id + '\',\'" + cat.id + '\', this.files[0])" />';
       return '<div class="pagdoc-card ' + (item.anexado ? 'ok' : '') + '">' +
         '<div class="pagdoc-title"><span>' + cat.nome + '</span><span class="status-badge ' + (item.anexado ? 'autorizado' : 'pendente') + '">' + (item.anexado ? 'anexado' : 'pendente') + '</span></div>' +
-        '<input type="file" onchange="anexarDocPagamento(\'' + p.id + '\',\'' + cat.id + '\', this.files[0])" />' +
+        inputFileHtml +
         arquivoInfoHtml +
         '</div>';
     }).join('');
@@ -1239,8 +1245,8 @@ function renderPagamentos(fin){
       '</div>' +
       '<div class="pagamento-meta">' + new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') + ' · ' + formatMoeda(p.valor) + (p.descricao ? ' · ' + escapeHtml(p.descricao) : '') + '</div>' +
       '<div class="fin-action-row">' +
-        '<button class="btn-ghost btn-small" onclick="alternarStatusPagamento(\'' + p.id + '\')">' + (p.status === 'aberto' ? 'marcar como fechado' : 'reabrir pagamento') + '</button>' +
-        '<button class="btn-ghost btn-small" onclick="removerPagamento(\'' + p.id + '\')">remover pagamento</button>' +
+        '<button class="btn-ghost btn-small" onclick="alternarStatusPagamento(\'" + p.id + '\')" >' + (p.status === 'aberto' ? 'marcar como fechado' : 'reabrir pagamento') + '</button>' +
+        '<button class="btn-ghost btn-small" onclick="removerPagamento(\'" + p.id + '\')" >remover pagamento</button>' +
       '</div>' +
       '<div class="pagamento-docs">' + docsHtml + '</div>';
     wrap.appendChild(card);
