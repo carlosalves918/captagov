@@ -394,10 +394,6 @@ tbody tr:last-child td {
 }
 
 /* — Tabela com mais respiro (usada em Contratadas) — */
-.table-comfortable {
-  table-layout: fixed;
-}
-
 .table-comfortable th,
 .table-comfortable td {
   padding: 18px 20px;

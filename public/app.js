@@ -1455,28 +1455,20 @@ function renderContratadas(c) {
     ${fin.contratadas && fin.contratadas.length > 0 ? `
       <div class="table-wrapper">
         <table class="table-comfortable">
-          <colgroup>
-            <col style="width:24%;" />
-            <col style="width:16%;" />
-            <col style="width:12%;" />
-            <col style="width:14%;" />
-            <col style="width:22%;" />
-            <col style="width:12%;" />
-          </colgroup>
           <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th>Contrato</th><th></th></tr></thead>
           <tbody>
             ${fin.contratadas.map(ct => `
               <tr${STATE.contratadaEditandoId === ct.id ? ' style="background:var(--blue-100);"' : ''}>
-                <td><strong class="td-truncate" title="${escapeHtml(ct.razaoSocial)}">${escapeHtml(ct.razaoSocial)}</strong></td>
-                <td class="td-truncate" title="${escapeHtml(ct.cnpj || '')}">${escapeHtml(ct.cnpj || '—')}</td>
-                <td class="td-truncate" title="${escapeHtml(ct.numeroContrato || '')}">${escapeHtml(ct.numeroContrato || '—')}</td>
-                <td class="font-mono td-truncate">${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</td>
-                <td>
+                <td><strong>${escapeHtml(ct.razaoSocial)}</strong></td>
+                <td style="white-space:nowrap;">${escapeHtml(ct.cnpj || '—')}</td>
+                <td style="white-space:nowrap;">${escapeHtml(ct.numeroContrato || '—')}</td>
+                <td class="font-mono" style="white-space:nowrap;">${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</td>
+                <td style="max-width:220px;">
                   ${ct.contratoArquivo && ct.contratoArquivoDataUrl
                     ? `<a href="${ct.contratoArquivoDataUrl}" download="${escapeHtml(ct.contratoArquivo)}" class="btn btn-ghost btn-sm td-truncate" style="max-width:100%;" title="${escapeHtml(ct.contratoArquivo)}">⬇ ${escapeHtml(ct.contratoArquivo)}</a>`
                     : '<span class="badge badge-warn">Sem anexo</span>'}
                 </td>
-                <td>
+                <td style="white-space:nowrap;">
                   <div class="td-actions">
                     <button class="btn btn-ghost btn-sm" onclick="editarContratada('${ct.id}')" title="Editar">Editar</button>
                     <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerContratada('${ct.id}')" title="Remover">Remover</button>
