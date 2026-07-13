@@ -4,12 +4,9 @@ import '../styles/globals.css';
 export default function App({ Component, pageProps }) {
   return (
     <>
-      {/* Dexie primeiro (beforeInteractive garante ordem), depois a lógica
-          original do app (afterInteractive, já com Dexie disponível). */}
-      <Script
-        src="https://unpkg.com/dexie@3.2.7/dist/dexie.js"
-        strategy="beforeInteractive"
-      />
+      {/* Dexie é carregado em pages/_document.js (beforeInteractive só é
+          permitido lá). Aqui só carregamos a lógica do app, depois que
+          o Dexie já está disponível. */}
       <Component {...pageProps} />
       <Script src="/app.js" strategy="afterInteractive" />
     </>

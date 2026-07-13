@@ -1,4 +1,5 @@
 import { Html, Head, Main, NextScript } from 'next/document';
+import Script from 'next/script';
 
 export default function Document() {
   return (
@@ -13,6 +14,12 @@ export default function Document() {
       <body>
         <Main />
         <NextScript />
+        {/* Dexie precisa estar pronto antes de public/app.js rodar.
+            beforeInteractive só é permitido aqui, em _document.js. */}
+        <Script
+          src="https://unpkg.com/dexie@3.2.7/dist/dexie.js"
+          strategy="beforeInteractive"
+        />
       </body>
     </Html>
   );
