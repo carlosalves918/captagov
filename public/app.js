@@ -15,7 +15,7 @@ const STATE = {
   protocoloSeq: 0,
   view: 'painel',
   subView: 'contratadas',
-  docSubView: 'justificativa',
+  docSubView: 'ia',
   tipoInstrumento: 'convenio',
   emTipoAtual: 'Convênio',
 };
@@ -57,6 +57,9 @@ async function carregarEstado() {
   STATE.emendas = p.emendas || [];
   STATE.convenioAtualId = p.convenioAtualId || null;
   STATE.protocoloSeq = p.protocoloSeq || 0;
+  STATE.convenios.forEach(c => {
+    (c.documentosExtras || []).forEach(doc => { if (!doc.status) doc.status = doc.anexado ? 'anexado' : 'solicitado'; });
+  });
 }
 
 // ==================== MIGRAÇÃO (v1/v2 localStorage → IndexedDB) ====================
@@ -195,7 +198,7 @@ function statusConvenio(c) {
 function mudarView(view) {
   STATE.view = view;
   if (view === 'prestacao') STATE.subView = 'contratadas';
-  else if (view === 'documentos') STATE.docSubView = 'justificativa';
+  else if (view === 'documentos') STATE.docSubView = 'ia';
   else if (view === 'emendas') STATE.subView = 'lista';
   else if (view === 'relatorios') STATE.subView = 'contratadas';
   renderTudo();
@@ -203,11 +206,6 @@ function mudarView(view) {
 
 function mudarSubView(sub) {
   STATE.subView = sub;
-  renderTudo();
-}
-
-function mudarDocSubView(sub) {
-  STATE.docSubView = sub;
   renderTudo();
 }
 
@@ -449,26 +447,45 @@ function adicionarContratada() {
   const numeroContrato = document.getElementById('ct_numero')?.value || '';
   const valorContrato = document.getElementById('ct_valorContrato')?.value || '';
 
-  if (STATE.contratadaEditandoId) {
-    const ct = c.financeiro.contratadas.find(x => x.id === STATE.contratadaEditandoId);
-    if (ct) {
-      ct.razaoSocial = nome;
-      ct.cnpj = cnpj;
-      ct.numeroContrato = numeroContrato;
-      ct.valorContrato = valorContrato;
+  const fileInput = document.getElementById('ct_anexo');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
+  const salvar = (contratoArquivo, contratoArquivoDataUrl) => {
+    if (STATE.contratadaEditandoId) {
+      const ct = c.financeiro.contratadas.find(x => x.id === STATE.contratadaEditandoId);
+      if (ct) {
+        ct.razaoSocial = nome;
+        ct.cnpj = cnpj;
+        ct.numeroContrato = numeroContrato;
+        ct.valorContrato = valorContrato;
+        if (contratoArquivo) {
+          ct.contratoArquivo = contratoArquivo;
+          ct.contratoArquivoDataUrl = contratoArquivoDataUrl;
+        }
+      }
+      STATE.contratadaEditandoId = null;
+    } else {
+      c.financeiro.contratadas.push({
+        id: gerarId('ct'), razaoSocial: nome, cnpj, numeroContrato, valorContrato,
+        contratoArquivo: contratoArquivo || null,
+        contratoArquivoDataUrl: contratoArquivoDataUrl || null,
+      });
     }
-    STATE.contratadaEditandoId = null;
+    salvarEstado();
+    document.getElementById('ct_razao').value = '';
+    document.getElementById('ct_cnpj').value = '';
+    document.getElementById('ct_numero').value = '';
+    document.getElementById('ct_valorContrato').value = '';
+    renderFinanceiro();
+  };
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = () => salvar(file.name, reader.result);
+    reader.readAsDataURL(file);
   } else {
-    c.financeiro.contratadas.push({
-      id: gerarId('ct'), razaoSocial: nome, cnpj, numeroContrato, valorContrato,
-    });
+    salvar(null, null);
   }
-  salvarEstado();
-  document.getElementById('ct_razao').value = '';
-  document.getElementById('ct_cnpj').value = '';
-  document.getElementById('ct_numero').value = '';
-  document.getElementById('ct_valorContrato').value = '';
-  renderFinanceiro();
 }
 
 function editarContratada(id) {
@@ -794,15 +811,36 @@ function docsVaziosPagamento() {
 
 function adicionarDocExtra() {
   if (!STATE.convenioAtualId) return;
-  const nome = document.getElementById('docExtraNome')?.value.trim();
+  const nomeEl = document.getElementById('docExtraNome');
+  const nome = nomeEl ? nomeEl.value.trim() : '';
   if (!nome) { alert('Dê um nome ao documento.'); return; }
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
   if (!c.documentosExtras) c.documentosExtras = [];
-  c.documentosExtras.push({ id: gerarId('dx'), nome, anexado: false, arquivo: null, arquivoDataUrl: null });
-  salvarEstado();
-  document.getElementById('docExtraNome').value = '';
-  renderDocs();
+
+  const fileInput = document.getElementById('docExtraAnexo');
+  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+
+  const registrar = (arquivoDataUrl) => {
+    c.documentosExtras.push({
+      id: gerarId('dx'),
+      nome,
+      anexado: !!file,
+      arquivo: file ? file.name : null,
+      arquivoDataUrl: arquivoDataUrl || null,
+      status: file ? 'anexado' : 'solicitado',
+    });
+    salvarEstado();
+    renderFinanceiro();
+  };
+
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = () => registrar(reader.result);
+    reader.readAsDataURL(file);
+  } else {
+    registrar(null);
+  }
 }
 
 function anexarDocExtra(id, file) {
@@ -816,8 +854,9 @@ function anexarDocExtra(id, file) {
     doc.anexado = true;
     doc.arquivo = file.name;
     doc.arquivoDataUrl = reader.result;
+    doc.status = 'anexado';
     salvarEstado();
-    renderDocs();
+    renderFinanceiro();
   };
   reader.readAsDataURL(file);
 }
@@ -828,7 +867,7 @@ function removerDocExtra(id) {
   if (!c || !c.documentosExtras) return;
   c.documentosExtras = c.documentosExtras.filter(x => x.id !== id);
   salvarEstado();
-  renderDocs();
+  renderFinanceiro();
 }
 
 // ==================== GERAÇÃO DE DOCUMENTOS ====================
@@ -907,6 +946,7 @@ async function exportarAnexosZIP() {
   const pastaExtratos = pastaBase.folder('extratos');
   const pastaRendimentos = pastaBase.folder('rendimentos');
   const pastaDocumentos = pastaBase.folder('documentos');
+  const pastaContratos = pastaBase.folder('contratos');
 
   let count = 0;
 
@@ -952,6 +992,15 @@ async function exportarAnexosZIP() {
     });
   });
 
+  // Contratos das contratadas
+  (c.financeiro.contratadas || []).forEach(ct => {
+    if (ct.contratoArquivoDataUrl) {
+      const base64 = ct.contratoArquivoDataUrl.split(',')[1];
+      pastaContratos.file(`${ct.razaoSocial || 'contratada'}_${ct.contratoArquivo}`, base64, { base64: true });
+      count++;
+    }
+  });
+
   // Documentos extras
   (c.documentosExtras || []).forEach(doc => {
     if (doc.arquivoDataUrl) {
@@ -991,6 +1040,7 @@ function importarDados(file) {
     STATE.convenios.forEach(c => {
       if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
       if (!c.documentosExtras) c.documentosExtras = [];
+      c.documentosExtras.forEach(doc => { if (!doc.status) doc.status = doc.anexado ? 'anexado' : 'solicitado'; });
       if (!c.docsGeradosIA) c.docsGeradosIA = [];
     });
     salvarEstado();
@@ -1158,7 +1208,7 @@ function renderPainel() {
               <span class="badge ${c.tipo === 'projeto' ? 'badge-info' : 'badge-ok'}">${c.tipo === 'projeto' ? 'Projeto' : 'Convênio'}</span>
               ${escapeHtml(c.numero || 'sem número')} — ${escapeHtml(c.programa || 'Sem programa')}
             </div>
-            <div class="convenio-card-sub">${escapeHtml(c.conveniente || c.proponente || 'Conveniente não informado')}</div>
+            <div class="convenio-card-sub">${escapeHtml(c.conveniente || c.proponente || 'Convenente não informado')}</div>
           </div>
           <div class="convenio-card-right">
             <span class="font-mono" style="font-size:14px;">R$ ${escapeHtml(c.valor || '0,00')}</span>
@@ -1218,7 +1268,7 @@ function renderCadastro() {
         </div>
         ` : ''}
 
-        <div class="form-section-title">🏢 Dados do Conveniente (Prefeitura)</div>
+        <div class="form-section-title">🏢 Dados do Convenente (Prefeitura)</div>
         <div class="form-group">
           <label class="form-label">Nome / Razão Social <span class="required">*</span></label>
           <input class="form-input" type="text" id="c_conveniente" placeholder="Ex: Prefeitura Municipal de..." />
@@ -1394,11 +1444,18 @@ function renderContratadas(c) {
           ${editando ? `<button class="btn btn-secondary" style="height:42px;" onclick="cancelarEdicaoContratada()">Cancelar</button>` : ''}
         </div>
       </div>
+      <div style="margin-top:12px;max-width:320px;">
+        <div class="form-group">
+          <label class="form-label">Anexar Contrato (PDF/imagem)</label>
+          <input class="form-input" type="file" id="ct_anexo" accept=".pdf,.jpg,.jpeg,.png" />
+        </div>
+        ${editando && editando.contratoArquivo ? `<div style="font-size:12px;color:var(--gray-500);">📎 Já anexado: ${escapeHtml(editando.contratoArquivo)} (selecione outro arquivo para substituir)</div>` : ''}
+      </div>
     </div>
     ${fin.contratadas && fin.contratadas.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th></th></tr></thead>
+          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th>Contrato</th><th></th></tr></thead>
           <tbody>
             ${fin.contratadas.map(ct => `
               <tr${STATE.contratadaEditandoId === ct.id ? ' style="background:var(--blue-100);"' : ''}>
@@ -1406,6 +1463,11 @@ function renderContratadas(c) {
                 <td>${escapeHtml(ct.cnpj || '—')}</td>
                 <td>${escapeHtml(ct.numeroContrato || '—')}</td>
                 <td class="font-mono">${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</td>
+                <td>
+                  ${ct.contratoArquivo && ct.contratoArquivoDataUrl
+                    ? `<a href="${ct.contratoArquivoDataUrl}" download="${escapeHtml(ct.contratoArquivo)}" class="btn btn-ghost btn-sm">⬇ ${escapeHtml(ct.contratoArquivo)}</a>`
+                    : '<span class="badge badge-warn">Sem anexo</span>'}
+                </td>
                 <td style="display:flex;gap:6px;">
                   <button class="btn btn-ghost btn-sm" onclick="editarContratada('${ct.id}')">Editar</button>
                   <button class="btn btn-ghost btn-sm" onclick="removerContratada('${ct.id}')">Remover</button>
@@ -1563,117 +1625,11 @@ function renderRendimentos(c) {
 
 // ==================== GESTÃO DE DOCUMENTOS ====================
 function renderGestaoDocumentos() {
-  const subTabs = [
-    { id: 'justificativa', label: 'Justificativa Técnica' },
-    { id: 'ia', label: 'Documentos por IA' },
-  ];
   return `
-    <div class="subtabs">
-      ${subTabs.map(t => `<button class="subtab ${STATE.docSubView === t.id ? 'active' : ''}" onclick="mudarDocSubView('${t.id}')">${t.label}</button>`).join('')}
-    </div>
     <div class="card">
-      ${STATE.docSubView === 'justificativa' ? renderJustificativa() : renderDocsIA()}
+      ${renderDocsIA()}
     </div>
   `;
-}
-
-function renderJustificativa() {
-  return `
-    <div class="card-title" style="font-size:16px;">Gerador de Justificativa Técnica</div>
-    <div class="card-subtitle">Preencha os campos abaixo. O texto será gerado localmente a partir dos dados do convênio ativo.</div>
-    <div class="form-grid" style="margin-top:16px;">
-      <div class="form-group"><label class="form-label">Município</label><input class="form-input" id="doc_municipio" /></div>
-      <div class="form-group"><label class="form-label">Fonte de Recurso</label>
-        <select class="form-input form-select" id="doc_fonte">
-          <option>FNDE</option><option>SUDENE</option><option>COMPESA</option><option>SEDUH/PE</option><option>PROMAQ</option>
-        </select>
-      </div>
-      <div class="form-group full-width"><label class="form-label">Objeto do Projeto</label><input class="form-input" id="doc_objeto" /></div>
-      <div class="form-group"><label class="form-label">Valor (R$)</label><input class="form-input" id="doc_valor" oninput="mascararValor(this)" inputmode="numeric" /></div>
-      <div class="form-group"><label class="form-label">Bairro / Localidade</label><input class="form-input" id="doc_bairro" /></div>
-      <div class="form-group full-width"><label class="form-label">Situação Atual x Desejada</label><textarea class="form-input" id="doc_situacao" rows="4" style="resize:vertical;" placeholder="Ex: A escola X possui 300 alunos em sala superlotada x sala com 25 alunos por turma"></textarea></div>
-    </div>
-    <div style="margin-top:16px;display:flex;gap:12px;">
-      <button class="btn btn-primary btn-lg" onclick="gerarJustificativa()">📄 Gerar Documento</button>
-      <button class="btn btn-secondary btn-lg" onclick="preencherDoConvenio()">🔄 Preencher do Convênio</button>
-    </div>
-    <div id="docResult" style="margin-top:20px;"></div>
-  `;
-}
-
-function gerarJustificativa() {
-  const dados = {
-    municipio: document.getElementById('doc_municipio')?.value || '',
-    fonte: document.getElementById('doc_fonte')?.value || 'FNDE',
-    objeto: document.getElementById('doc_objeto')?.value || '',
-    valor: document.getElementById('doc_valor')?.value || '',
-    bairro: document.getElementById('doc_bairro')?.value || '',
-    situacao: document.getElementById('doc_situacao')?.value || '',
-  };
-  if (!dados.municipio || !dados.objeto || !dados.situacao) {
-    document.getElementById('docResult').innerHTML = '<div class="alert alert-warning">Preencha Município, Objeto e Situação.</div>';
-    return;
-  }
-
-  const [atual, desejada] = dados.situacao.split(/\s+(?:x|vs\.?|→|->)\s+|\n/i).map(s => s.trim()).filter(Boolean);
-  const situacaoAtual = atual || 'não detalhada';
-  const situacaoDesejada = desejada || '';
-  const d = { ...dados, situacaoAtual, situacaoDesejada };
-
-  const contextualizacoes = {
-    FNDE: `O Município de ${d.municipio} apresenta demanda por ${d.objeto.toLowerCase()}, em conformidade com as diretrizes do Fundo Nacional de Desenvolvimento da Educação (FNDE).`,
-    SUDENE: `O Município de ${d.municipio}, integrante da área de atuação da SUDENE, identifica a necessidade de ${d.objeto.toLowerCase()} como medida estruturante para o desenvolvimento regional.`,
-    COMPESA: `O Município de ${d.municipio} apresenta demanda por ${d.objeto.toLowerCase()}, no âmbito da infraestrutura de saneamento básico, em parceria com a COMPESA.`,
-    'SEDUH/PE': `O Município de ${d.municipio} apresenta demanda de infraestrutura urbana, alinhada às diretrizes da SEDUH/PE.`,
-    PROMAQ: `O Município de ${d.municipio} apresenta demanda por ${d.objeto.toLowerCase()}, no âmbito do Programa de Modernização de Máquinas e Equipamentos (PROMAQ).`,
-  };
-
-  const local = d.bairro ? ` na localidade de ${d.bairro}` : '';
-  const valorTxt = d.valor ? `, no valor total de R$ ${d.valor}` : '';
-
-  const texto = [
-    (contextualizacoes[d.fonte] || contextualizacoes.FNDE),
-    `Atualmente${local}, verifica-se a seguinte situação: ${situacaoAtual}. Essa condição demanda intervenção técnica planejada.`,
-    `Para equacionar o problema, propõe-se a execução de ${d.objeto.toLowerCase()}${valorTxt}, com recursos oriundos de ${d.fonte}.`,
-    `Espera-se, com a execução do objeto, a melhoria efetiva das condições atualmente enfrentadas, com benefício direto à população do Município de ${d.municipio}.${situacaoDesejada ? ' A situação desejada: ' + situacaoDesejada + '.' : ''}`,
-  ].join('\n\n');
-
-  document.getElementById('docResult').innerHTML = `
-    <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:20px;">
-      <div style="font-size:12px;color:var(--gray-500);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">Justificativa Técnica Gerada</div>
-      <div style="font-size:15px;line-height:1.8;color:var(--gray-800);white-space:pre-wrap;">${escapeHtml(texto)}</div>
-      <div style="margin-top:16px;display:flex;gap:8px;">
-        <button class="btn btn-secondary btn-sm" onclick="copiarTexto(this)">📋 Copiar Texto</button>
-      </div>
-    </div>
-  `;
-}
-
-function copiarTexto(btn) {
-  const textEl = btn.closest('div').previousElementSibling;
-  navigator.clipboard.writeText(textEl.textContent).then(() => {
-    btn.textContent = '✓ Copiado!';
-    setTimeout(() => { btn.textContent = '📋 Copiar Texto'; }, 2000);
-  });
-}
-
-function preencherDoConvenio() {
-  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
-  if (!c) { alert('Selecione um convênio no Painel Geral.'); return; }
-  const mun = (c.municipioProp || '').split('/')[0].trim() || '';
-  const programa = (c.programa || '').toUpperCase();
-  let fonte = 'FNDE';
-  if (programa.includes('SUDENE')) fonte = 'SUDENE';
-  else if (programa.includes('COMPESA')) fonte = 'COMPESA';
-  else if (programa.includes('SEDUH')) fonte = 'SEDUH/PE';
-  else if (programa.includes('PROMAQ')) fonte = 'PROMAQ';
-
-  ['doc_municipio', 'doc_fonte', 'doc_objeto', 'doc_valor', 'doc_bairro'].forEach((id, i) => {
-    const vals = [mun, fonte, c.programa || '', c.valor || '', c.bairroProp || ''];
-    const el = document.getElementById(id);
-    if (el) el.value = vals[i];
-  });
-  document.getElementById('docResult').innerHTML = '<div class="alert alert-success">Campos preenchidos a partir do convênio ativo. Revise antes de gerar.</div>';
 }
 
 // ==================== DOCUMENTOS POR IA (placeholder) ====================
@@ -1700,15 +1656,22 @@ function renderDocs() {
   const extras = c.documentosExtras || [];
   return `
     <div style="margin-bottom:16px;display:flex;gap:12px;align-items:end;">
-      <div class="form-group" style="flex:1;"><label class="form-label">Nome do Documento</label><input class="form-input" id="docExtraNome" /></div>
+      <div class="form-group" style="flex:1;"><label class="form-label">Nome do Documento</label><input class="form-input" id="docExtraNome" placeholder="Ex: Certidão de Regularidade..." /></div>
+      <div class="form-group" style="flex:1;"><label class="form-label">Anexo (opcional)</label><input class="form-input" type="file" id="docExtraAnexo" /></div>
       <button class="btn btn-primary" style="height:42px;" onclick="adicionarDocExtra()">+ Adicionar</button>
     </div>
+    <div style="font-size:12px;color:var(--gray-500);margin:-8px 0 16px;">Se nenhum anexo for selecionado, o documento entra na lista como <strong>Solicitado</strong>, e pode ser anexado depois.</div>
     ${extras.length === 0
-    ? '<div class="empty-state text-sm" style="padding:30px;">Nenhum documento anexado.</div>'
+    ? '<div class="empty-state text-sm" style="padding:30px;">Nenhum documento cadastrado.</div>'
     : extras.map(doc => `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);margin-bottom:8px;">
         <div>
-          <div style="font-weight:500;font-size:14px;">${escapeHtml(doc.nome)}</div>
+          <div style="font-weight:500;font-size:14px;display:flex;align-items:center;gap:8px;">
+            ${escapeHtml(doc.nome)}
+            ${doc.anexado
+              ? '<span class="badge badge-ok">Anexado</span>'
+              : '<span class="badge badge-warn">Solicitado</span>'}
+          </div>
           ${doc.anexado && doc.arquivo ? '<div style="font-size:12px;color:var(--gray-500);">📎 ' + escapeHtml(doc.arquivo) + '</div>' : ''}
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -1746,7 +1709,7 @@ function renderRelatorios() {
       <div class="card-title" style="font-size:16px;">Relatório Geral — Todos os Convênios</div>
       <div class="table-wrapper" style="margin-top:16px;">
         <table>
-          <thead><tr><th>Convênio</th><th>Programa</th><th>Conveniente</th><th>Valor</th><th>Saldo</th><th>PC até</th></tr></thead>
+          <thead><tr><th>Convênio</th><th>Programa</th><th>Convenente</th><th>Valor</th><th>Saldo</th><th>PC até</th></tr></thead>
           <tbody>
             ${STATE.convenios.map(cv => {
               const res = calcularResumoFinanceiro(cv.id);
@@ -1773,7 +1736,7 @@ function renderRelatorioFinanceiro(c) {
   return `
     <div class="card">
       <div class="card-title" style="font-size:18px;">${escapeHtml(c.numero || '?')} — ${escapeHtml(c.programa || '')}</div>
-      <div class="card-subtitle">Conveniente: ${escapeHtml(c.conveniente || c.proponente || '?')} · Valor: ${formatMoeda(resumo.valor)}</div>
+      <div class="card-subtitle">Convenente: ${escapeHtml(c.conveniente || c.proponente || '?')} · Valor: ${formatMoeda(resumo.valor)}</div>
 
       <div class="fin-summary-grid">
         <div class="fin-summary-card"><div class="fin-summary-label">Movimento Extrato</div><div class="fin-summary-value ${resumo.movExtrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.movExtrato)}</div></div>
@@ -1860,7 +1823,7 @@ function renderEmendaLista() {
         <div class="convenio-card" style="margin-bottom:8px;">
           <div>
             <div class="convenio-card-title">${escapeHtml(e.parlamentar || '?')} <span style="color:var(--gray-400);font-weight:400;">— nº ${escapeHtml(e.numero || '?')}${e.ano ? '/' + escapeHtml(e.ano) : ''}</span></div>
-            <div class="convenio-card-sub">${escapeHtml(e.objeto || 'Objeto não informado')}${e.orgao ? ' · ' + escapeHtml(e.orgao) : ''}${conveniente ? ' · Conveniente: ' + escapeHtml(conveniente) : ''}</div>
+            <div class="convenio-card-sub">${escapeHtml(e.objeto || 'Objeto não informado')}${e.orgao ? ' · ' + escapeHtml(e.orgao) : ''}${conveniente ? ' · Convenente: ' + escapeHtml(conveniente) : ''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
             <span class="font-mono" style="font-size:14px;">R$ ${escapeHtml(e.valor || '0,00')}</span>
@@ -1916,23 +1879,23 @@ function renderEmendaForm() {
       </div>
 
       ${exigeConvenio ? `
-      <div class="form-section-title">🏢 Conveniente</div>
+      <div class="form-section-title">🏢 Convenente</div>
       <div class="form-group full-width">
         <label class="form-label">Vincular a Convênio Cadastrado</label>
         <select class="form-input form-select" id="em_convenio">
           <option value="">— nenhum —</option>
           ${STATE.convenios.map(cv => `<option value="${cv.id}">${escapeHtml(cv.numero || '?')} — ${escapeHtml(cv.conveniente || cv.proponente || '')}</option>`).join('')}
         </select>
-        <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Selecione o convênio já cadastrado; os dados da prefeitura (conveniente) serão obtidos automaticamente do cadastro.</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:4px;">Selecione o convênio já cadastrado; os dados da prefeitura (convenente) serão obtidos automaticamente do cadastro.</div>
       </div>
       ` : `
-      <div class="form-section-title">🏢 Conveniente (Beneficiário direto)</div>
+      <div class="form-section-title">🏢 Convenente (Beneficiário direto)</div>
       <div class="form-group">
-        <label class="form-label">Nome do Conveniente / Prefeitura</label>
+        <label class="form-label">Nome do Convenente / Prefeitura</label>
         <input class="form-input" id="em_conveniente_nome" placeholder="Ex: Prefeitura Municipal de..." />
       </div>
       <div class="form-group">
-        <label class="form-label">CNPJ do Conveniente</label>
+        <label class="form-label">CNPJ do Convenente</label>
         <input class="form-input" id="em_conveniente_cnpj" maxlength="18" oninput="mascararCNPJ(this)" placeholder="00.000.000/0000-00" />
       </div>
       `}
@@ -2067,7 +2030,7 @@ function gerarPDFRelatorio() {
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(...GRAY);
-  doc.text('Programa: ' + (c.programa || '—') + '  |  Conveniente: ' + (c.conveniente || c.proponente || '—'), M, y);
+  doc.text('Programa: ' + (c.programa || '—') + '  |  Convenente: ' + (c.conveniente || c.proponente || '—'), M, y);
   y += 6;
   doc.text('Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '  |  PC até: ' + (c.prazoLimitePC || '—'), M, y);
 
