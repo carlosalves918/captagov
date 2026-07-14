@@ -1553,100 +1553,32 @@ function importarDados(file) {
 }
 
 // ==================== RENDERIZAÇÃO ====================
-// Corrige um bug conhecido: como renderTudo() reconstrói o HTML inteiro via
-// innerHTML, o campo de texto em foco perdia o cursor (voltava pro fim ou
-// pro início) a cada tecla digitada — muito perceptível no campo de busca.
-// Aqui a gente guarda id + seleção do campo focado antes de renderizar de
-// novo, e restaura depois.
+// A partir da v3.1, Sidebar e Header viraram componentes React de verdade
+// (ver contexts/AppContext.jsx e components/). O corpo principal (`#mainBody`)
+// ainda é renderizado do jeito antigo para as telas que faltam migrar, mas
+// quem decide *quando* chamar renderBody() é o componente React <MainBody/>
+// — isso evita que renderBody() rode antes da div #mainBody existir no DOM
+// (ela só existe quando a view atual não é 'painel', que agora é 100% React).
 function renderTudo() {
-  const ativo = document.activeElement;
-  const preservar = ativo && ativo.id && (ativo.tagName === 'INPUT' || ativo.tagName === 'TEXTAREA')
-    ? { id: ativo.id, selStart: ativo.selectionStart, selEnd: ativo.selectionEnd }
-    : null;
-
-  renderSidebar();
-  renderHeader();
-  renderBody();
-
-  if (preservar) {
-    const el = document.getElementById(preservar.id);
-    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
-      el.focus();
-      try { el.setSelectionRange(preservar.selStart, preservar.selEnd); } catch { /* tipos como date/number não suportam seleção — ignora */ }
-    }
-  }
-}
-
-function renderSidebar() {
-  const el = document.getElementById('sidebar');
-  if (!el) return;
-  const items = [
-    { id: 'painel', icon: '📊', label: 'Painel Geral' },
-    { id: 'cadastro', icon: '📝', label: 'Cadastro' },
-    { id: 'prestacao', icon: '📋', label: 'Prestação de Contas' },
-    { id: 'documentos', icon: '📁', label: 'Gestão de Documentos' },
-    { id: 'relatorios', icon: '📈', label: 'Relatórios' },
-    { id: 'emendas', icon: '🏛️', label: 'Emendas Parlamentares' },
-    { id: 'instituicoes', icon: '🏢', label: 'Instituições' },
-    { id: 'proponentes', icon: '🤝', label: 'Proponentes/Convenentes' },
-    { id: 'responsaveisTecnicos', icon: '👷', label: 'Responsável Técnico' },
-    { id: 'usuarios', icon: '👤', label: 'Usuários' },
-  ];
-  el.innerHTML = `
-    <div class="sidebar-header">
-      <div class="sidebar-logo-panel">
-        <img src="/logo.png" alt="CaptaGov" class="sidebar-logo-img" />
-      </div>
-      <div class="sidebar-slogan">Conectando projetos a recursos.<br />Transformando municípios.</div>
-    </div>
-    <nav class="sidebar-nav">
-      ${items.map(i => `
-        <button class="sidebar-nav-item ${STATE.view === i.id ? 'active' : ''}" onclick="mudarView('${i.id}')">
-          <span class="icon">${i.icon}</span>
-          <span>${i.label}</span>
-        </button>
-      `).join('')}
-    </nav>
-    <div class="sidebar-footer">
-      <div style="margin-bottom:8px;">
-        <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarDados()">⬇ Exportar Backup (JSON)</button>
-        <label class="btn btn-secondary btn-sm" style="width:100%;display:block;text-align:center;margin-bottom:6px;">
-          ⬆ Importar Backup
-          <input type="file" accept=".json" style="display:none" onchange="importarDados(this.files[0])" />
-        </label>
-        <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="abrirTelaBackups()">🕐 Backups Automáticos</button>
-      </div>
-      <div>CaptaGov v2.2 — Dados locais</div>
-    </div>
-  `;
-}
-
-function renderHeader() {
-  const el = document.getElementById('mainHeader');
-  if (!el) return;
-  const nomesAbas = {
-    painel: 'Painel Geral', cadastro: 'Cadastro', prestacao: 'Prestação de Contas',
-    documentos: 'Gestão de Documentos', relatorios: 'Relatórios', emendas: 'Emendas Parlamentares',
-    instituicoes: 'Instituições', proponentes: 'Proponentes/Convenentes',
-    responsaveisTecnicos: 'Responsável Técnico', usuarios: 'Usuários', backups: 'Backups Automáticos',
-  };
-  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
-  el.innerHTML = `
-    <div class="main-header-left">
-      <div>
-        <div class="main-header-title">${nomesAbas[STATE.view] || STATE.view}</div>
-        ${c ? '<div class="main-header-breadcrumb">' + escapeHtml(c.conveniente || c.proponente || 'Convenente não informado') + ' · Convênio nº ' + escapeHtml(c.numero || 'sem número') + '</div>' : ''}
-      </div>
-    </div>
-    <div class="main-header-date">${hojeFormatado()}</div>
-  `;
+  window.dispatchEvent(new CustomEvent('captagov:changed'));
 }
 
 function renderBody() {
   const el = document.getElementById('mainBody');
   if (!el) return;
+
+  // Corrige um bug conhecido: como isso reconstrói o HTML inteiro via
+  // innerHTML, o campo de texto em foco perdia o cursor (voltava pro fim ou
+  // pro início) a cada tecla digitada — muito perceptível no campo de busca.
+  // Aqui a gente guarda id + seleção do campo focado antes de renderizar de
+  // novo, e restaura depois.
+  const ativo = document.activeElement;
+  const preservar = ativo && ativo.id && (ativo.tagName === 'INPUT' || ativo.tagName === 'TEXTAREA')
+    ? { id: ativo.id, selStart: ativo.selectionStart, selEnd: ativo.selectionEnd }
+    : null;
+
   switch (STATE.view) {
-    case 'painel': el.innerHTML = renderPainel(); break;
+    case 'painel': el.innerHTML = ''; break; // Painel Geral agora é React puro — ver <PainelGeral/>
     case 'cadastro': el.innerHTML = renderCadastro(); break;
     case 'prestacao': el.innerHTML = renderPrestacaoContas(); break;
     case 'documentos': el.innerHTML = renderGestaoDocumentos(); break;
@@ -1658,6 +1590,14 @@ function renderBody() {
     case 'responsaveisTecnicos': el.innerHTML = renderResponsaveisTecnicos(); break;
     case 'usuarios': el.innerHTML = renderUsuarios(); break;
     default: el.innerHTML = '<div class="empty-state"><div class="empty-state-title">Página em desenvolvimento</div></div>';
+  }
+
+  if (preservar) {
+    const elFoco = document.getElementById(preservar.id);
+    if (elFoco && (elFoco.tagName === 'INPUT' || elFoco.tagName === 'TEXTAREA')) {
+      elFoco.focus();
+      try { elFoco.setSelectionRange(preservar.selStart, preservar.selEnd); } catch { /* tipos como date/number não suportam seleção — ignora */ }
+    }
   }
 }
 
@@ -3250,12 +3190,19 @@ Object.assign(window, {
   registrarPagamento,
   removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerExtrato, removerPagamento,
-  removerRendimento, renderTudo, restaurarSnapshotAuto, excluirSnapshotAuto,
+  removerRendimento, renderTudo, renderBody, restaurarSnapshotAuto, excluirSnapshotAuto,
   salvarConvenio, salvarEmenda, salvarInstituicao, salvarProponente,
   salvarResponsavelTecnico, salvarUsuario,
   toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
+  // Expostos para a ponte React (ver contexts/AppContext.jsx) — telas ainda não
+  // migradas continuam usando essas funções por baixo dos panos.
+  STATE, calcularResumoFinanceiro, statusConvenio,
 });
+
+// Avisa a ponte React (se já estiver montada) que window.STATE já existe,
+// mesmo que os dados ainda não tenham carregado do IndexedDB.
+window.dispatchEvent(new CustomEvent('captagov:changed'));
 
 // ==================== INICIALIZAÇÃO ====================
 (async function iniciar() {
