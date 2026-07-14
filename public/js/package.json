@@ -1,0 +1,4 @@
+{
+  "type": "module",
+  "comment": "Escopo local: diz ao navegador (via <script type=module>) e ao Node (nos testes) que os arquivos aqui usam import/export nativo. Não afeta o build do Next.js — a pasta public/ é só servida como estática, nunca processada pelo webpack."
+}

@@ -5,7 +5,7 @@ export default function App({ Component, pageProps }) {
   return (
     <>
       <Component {...pageProps} />
-      <Script src="/app.js" strategy="afterInteractive" />
+      <Script src="/js/app.js" type="module" strategy="afterInteractive" />
     </>
   );
 }
