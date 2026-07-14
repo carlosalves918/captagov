@@ -46,6 +46,16 @@ db.version(4).stores({
   proponentes: 'id',
   backupsAuto: 'id, criadoEm',
 });
+db.version(5).stores({
+  convenios: 'id',
+  emendas: 'id',
+  meta: 'chave',
+  instituicoes: 'id',
+  proponentes: 'id',
+  backupsAuto: 'id, criadoEm',
+  responsaveisTecnicos: 'id',
+  usuarios: 'id',
+});
 
 let _saveTimersConvenio = new Map(); // debounce por-registro, não mais global
 let _saveTimerEmenda = new Map();
@@ -142,13 +152,49 @@ export async function removerSnapshotAutoDb(id) {
   await db.backupsAuto.delete(id);
 }
 
+let _saveTimersResponsavelTecnico = new Map();
+
+export function salvarResponsavelTecnicoDb(rt) {
+  if (!rt || !rt.id) return;
+  const timers = _saveTimersResponsavelTecnico;
+  if (timers.has(rt.id)) clearTimeout(timers.get(rt.id));
+  const t = setTimeout(() => {
+    db.responsaveisTecnicos.put(rt).catch(e => console.error('Erro ao salvar responsável técnico no IndexedDB:', e));
+    timers.delete(rt.id);
+  }, 300);
+  timers.set(rt.id, t);
+}
+
+export async function removerResponsavelTecnicoDb(id) {
+  await db.responsaveisTecnicos.delete(id);
+}
+
+let _saveTimersUsuario = new Map();
+
+export function salvarUsuarioDb(u) {
+  if (!u || !u.id) return;
+  const timers = _saveTimersUsuario;
+  if (timers.has(u.id)) clearTimeout(timers.get(u.id));
+  const t = setTimeout(() => {
+    db.usuarios.put(u).catch(e => console.error('Erro ao salvar usuário no IndexedDB:', e));
+    timers.delete(u.id);
+  }, 300);
+  timers.set(u.id, t);
+}
+
+export async function removerUsuarioDb(id) {
+  await db.usuarios.delete(id);
+}
+
 /** Usado só na importação de backup (substituir tudo) — limpa as tabelas antes de gravar o conteúdo novo. */
 export async function limparConveniosEmendasDb() {
-  await db.transaction('rw', db.convenios, db.emendas, db.instituicoes, db.proponentes, async () => {
+  await db.transaction('rw', db.convenios, db.emendas, db.instituicoes, db.proponentes, db.responsaveisTecnicos, db.usuarios, async () => {
     await db.convenios.clear();
     await db.emendas.clear();
     await db.instituicoes.clear();
     await db.proponentes.clear();
+    await db.responsaveisTecnicos.clear();
+    await db.usuarios.clear();
   });
 }
 
@@ -162,11 +208,13 @@ export function salvarMetaDb(meta) {
 /** Carrega tudo do banco pras estruturas em memória. Retorna { convenios, emendas, meta }. */
 export async function carregarEstadoDb() {
   await migrarParaTabelas();
-  const [convenios, emendas, instituicoes, proponentes, metaRow] = await Promise.all([
+  const [convenios, emendas, instituicoes, proponentes, responsaveisTecnicos, usuarios, metaRow] = await Promise.all([
     db.convenios.toArray(),
     db.emendas.toArray(),
     db.instituicoes.toArray(),
     db.proponentes.toArray(),
+    db.responsaveisTecnicos.toArray(),
+    db.usuarios.toArray(),
     db.meta.get('geral'),
   ]);
   return {
@@ -174,6 +222,8 @@ export async function carregarEstadoDb() {
     emendas,
     instituicoes,
     proponentes,
+    responsaveisTecnicos,
+    usuarios,
     convenioAtualId: metaRow?.convenioAtualId || null,
     protocoloSeq: metaRow?.protocoloSeq || 0,
   };

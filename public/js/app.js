@@ -14,6 +14,7 @@ import {
   salvarEmendaDb, removerEmendaDb, salvarMetaDb, limparConveniosEmendasDb,
   salvarInstituicaoDb, removerInstituicaoDb, salvarProponenteDb, removerProponenteDb,
   criarSnapshotAutoDb, listarSnapshotsAutoDb, buscarSnapshotAutoDb, removerSnapshotAutoDb,
+  salvarResponsavelTecnicoDb, removerResponsavelTecnicoDb, salvarUsuarioDb, removerUsuarioDb,
 } from './db.js';
 import { toastSucesso, toastErro, toastAviso } from './toast.js';
 import { gerarDocumentoAutomatico, gerarModeloEsqueleto, TIPOS_COM_AUTOPREENCHIMENTO } from './features/justificativa.js';
@@ -24,12 +25,17 @@ const STATE = {
   emendas: [],
   instituicoes: [],
   proponentes: [],
+  responsaveisTecnicos: [],
+  usuarios: [],
   backupsAutoLista: [],
   convenioAtualId: null,
   convenioEditandoId: null,
   emendaEditandoId: null,
   instituicaoEditandoId: null,
   proponenteEditandoId: null,
+  responsavelTecnicoEditandoId: null,
+  usuarioEditandoId: null,
+  responsavelTecnicoSelecionadoId: null,
   contratadaEditandoId: null,
   protocoloSeq: 0,
   view: 'painel',
@@ -88,6 +94,24 @@ function persistirTodosProponentes() {
   STATE.proponentes.forEach(p => salvarProponenteDb(p));
 }
 
+function persistirResponsavelTecnico(id) {
+  const r = STATE.responsaveisTecnicos.find(x => x.id === id);
+  if (r) salvarResponsavelTecnicoDb(r);
+}
+
+function persistirTodosResponsaveisTecnicos() {
+  STATE.responsaveisTecnicos.forEach(r => salvarResponsavelTecnicoDb(r));
+}
+
+function persistirUsuario(id) {
+  const u = STATE.usuarios.find(x => x.id === id);
+  if (u) salvarUsuarioDb(u);
+}
+
+function persistirTodosUsuarios() {
+  STATE.usuarios.forEach(u => salvarUsuarioDb(u));
+}
+
 function persistirMeta() {
   salvarMetaDb({ convenioAtualId: STATE.convenioAtualId, protocoloSeq: STATE.protocoloSeq });
 }
@@ -101,6 +125,8 @@ function salvarEstado() {
   if (STATE.emendaEditandoId) persistirEmenda(STATE.emendaEditandoId);
   if (STATE.instituicaoEditandoId) persistirInstituicao(STATE.instituicaoEditandoId);
   if (STATE.proponenteEditandoId) persistirProponente(STATE.proponenteEditandoId);
+  if (STATE.responsavelTecnicoEditandoId) persistirResponsavelTecnico(STATE.responsavelTecnicoEditandoId);
+  if (STATE.usuarioEditandoId) persistirUsuario(STATE.usuarioEditandoId);
   persistirMeta();
 }
 
@@ -128,6 +154,8 @@ async function carregarEstado() {
   STATE.emendas = p.emendas || [];
   STATE.instituicoes = p.instituicoes || [];
   STATE.proponentes = p.proponentes || [];
+  STATE.responsaveisTecnicos = p.responsaveisTecnicos || [];
+  STATE.usuarios = p.usuarios || [];
   STATE.convenioAtualId = p.convenioAtualId || null;
   STATE.protocoloSeq = p.protocoloSeq || 0;
   STATE.convenios.forEach(c => {
@@ -143,6 +171,8 @@ function mudarView(view) {
   else if (view === 'emendas') STATE.subView = 'lista';
   else if (view === 'instituicoes') STATE.subView = 'lista';
   else if (view === 'proponentes') STATE.subView = 'lista';
+  else if (view === 'responsaveisTecnicos') STATE.subView = 'lista';
+  else if (view === 'usuarios') STATE.subView = 'lista';
   else if (view === 'relatorios') STATE.subView = 'contratadas';
   if (view !== 'cadastro') STATE.cadastroMensagem = null;
   if (view !== 'documentos') { STATE.docGeradoTipo = null; STATE.docGeradoTexto = null; }
@@ -152,6 +182,33 @@ function mudarView(view) {
 function mudarSubView(sub) {
   STATE.subView = sub;
   renderTudo();
+}
+
+function preencherComInstituicao(id) {
+  if (!id) return;
+  const i = STATE.instituicoes.find(x => x.id === id);
+  if (!i) return;
+  const orgao = document.getElementById('c_orgao');
+  if (orgao) orgao.value = i.nomeFantasia || i.razaoSocial || '';
+  toastSucesso('Dados da instituição preenchidos.');
+}
+
+function preencherComProponente(id) {
+  if (!id) return;
+  const p = STATE.proponentes.find(x => x.id === id);
+  if (!p) return;
+  const mapa = {
+    c_conveniente: p.razaoSocial, c_cnpj: p.documento, c_cep: p.cep, c_logradouro: p.logradouro,
+    c_bairro: p.bairro, c_municipio: p.municipio, c_telefone: p.telefone, c_email: p.email,
+    c_banco: p.banco, c_conta: p.conta,
+  };
+  Object.entries(mapa).forEach(([campo, valor]) => {
+    const el = document.getElementById(campo);
+    if (el && valor) el.value = valor;
+  });
+  const natEl = document.getElementById('c_natureza');
+  if (natEl && [...natEl.options].some(o => o.value === p.natureza)) natEl.value = p.natureza;
+  toastSucesso('Dados do proponente/convenente preenchidos.');
 }
 
 // ==================== CRUD CONVÊNIOS ====================
@@ -599,6 +656,8 @@ async function verificarBackupAutomatico() {
         emendas: STATE.emendas,
         instituicoes: STATE.instituicoes,
         proponentes: STATE.proponentes,
+        responsaveisTecnicos: STATE.responsaveisTecnicos,
+        usuarios: STATE.usuarios,
         convenioAtualId: STATE.convenioAtualId,
         protocoloSeq: STATE.protocoloSeq,
       };
@@ -639,12 +698,16 @@ async function restaurarSnapshotAuto(id) {
     STATE.emendas = payload.emendas || [];
     STATE.instituicoes = payload.instituicoes || [];
     STATE.proponentes = payload.proponentes || [];
+    STATE.responsaveisTecnicos = payload.responsaveisTecnicos || [];
+    STATE.usuarios = payload.usuarios || [];
     STATE.convenioAtualId = payload.convenioAtualId || null;
     STATE.protocoloSeq = payload.protocoloSeq || 0;
     persistirTodosConvenios();
     persistirTodasEmendas();
     persistirTodasInstituicoes();
     persistirTodosProponentes();
+    persistirTodosResponsaveisTecnicos();
+    persistirTodosUsuarios();
     persistirMeta();
     STATE.view = 'painel';
     renderTudo();
@@ -697,6 +760,149 @@ function renderBackups() {
         `).join('')}
     </div>
   `;
+}
+
+// ==================== CRUD RESPONSÁVEL TÉCNICO ====================
+function novoResponsavelTecnico() {
+  STATE.responsavelTecnicoEditandoId = null;
+  limparFormResponsavelTecnico();
+  mudarSubView('form');
+}
+
+function editarResponsavelTecnico(id) {
+  const r = STATE.responsaveisTecnicos.find(x => x.id === id);
+  if (!r) return;
+  STATE.responsavelTecnicoEditandoId = id;
+  STATE.view = 'responsaveisTecnicos';
+  STATE.subView = 'form';
+  renderTudo();
+  ['rt_nome', 'rt_cargo', 'rt_conselho', 'rt_numeroRegistro', 'rt_cpf', 'rt_telefone', 'rt_email', 'rt_obs'].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = r[k.replace('rt_', '')] || '';
+  });
+}
+
+function salvarResponsavelTecnico() {
+  const nota = document.getElementById('responsavelTecnicoNote');
+  const nome = (document.getElementById('rt_nome')?.value || '').trim();
+  const cpf = (document.getElementById('rt_cpf')?.value || '').trim();
+
+  if (!nome) {
+    nota.innerHTML = '<div class="alert alert-warning">Informe o nome do responsável técnico.</div>';
+    return;
+  }
+  const docCheck = validarCpfOuCnpj(cpf);
+  if (cpf && !docCheck.valido) {
+    nota.innerHTML = '<div class="alert alert-danger">CPF parece inválido. Confira os dígitos.</div>';
+    return;
+  }
+
+  const dados = {
+    nome,
+    cargo: document.getElementById('rt_cargo')?.value || '',
+    conselho: document.getElementById('rt_conselho')?.value || 'CREA',
+    numeroRegistro: document.getElementById('rt_numeroRegistro')?.value || '',
+    cpf,
+    telefone: document.getElementById('rt_telefone')?.value || '',
+    email: document.getElementById('rt_email')?.value || '',
+    obs: document.getElementById('rt_obs')?.value || '',
+  };
+
+  let idPersistir;
+  if (STATE.responsavelTecnicoEditandoId) {
+    const idx = STATE.responsaveisTecnicos.findIndex(r => r.id === STATE.responsavelTecnicoEditandoId);
+    if (idx > -1) STATE.responsaveisTecnicos[idx] = { id: STATE.responsavelTecnicoEditandoId, ...dados };
+    idPersistir = STATE.responsavelTecnicoEditandoId;
+  } else {
+    idPersistir = gerarId('rt');
+    STATE.responsaveisTecnicos.push({ id: idPersistir, ...dados });
+  }
+
+  persistirResponsavelTecnico(idPersistir);
+  STATE.responsavelTecnicoEditandoId = null;
+  limparFormResponsavelTecnico();
+  mudarSubView('lista');
+  toastSucesso('Responsável técnico salvo.');
+}
+
+function excluirResponsavelTecnico(id) {
+  const r = STATE.responsaveisTecnicos.find(x => x.id === id);
+  if (!r) return;
+  if (!confirm('Excluir o responsável técnico "' + (r.nome || '?') + '"?')) return;
+  STATE.responsaveisTecnicos = STATE.responsaveisTecnicos.filter(x => x.id !== id);
+  removerResponsavelTecnicoDb(id).catch(err => { console.error(err); toastErro('Não consegui remover do banco local — tente novamente.'); });
+  if (STATE.responsavelTecnicoEditandoId === id) {
+    STATE.responsavelTecnicoEditandoId = null;
+    limparFormResponsavelTecnico();
+  }
+  renderTudo();
+}
+
+// ==================== CRUD USUÁRIOS ====================
+function novoUsuario() {
+  STATE.usuarioEditandoId = null;
+  limparFormUsuario();
+  mudarSubView('form');
+}
+
+function editarUsuario(id) {
+  const u = STATE.usuarios.find(x => x.id === id);
+  if (!u) return;
+  STATE.usuarioEditandoId = id;
+  STATE.view = 'usuarios';
+  STATE.subView = 'form';
+  renderTudo();
+  ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs'].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = u[k.replace('us_', '')] || '';
+  });
+}
+
+function salvarUsuario() {
+  const nota = document.getElementById('usuarioNote');
+  const nome = (document.getElementById('us_nome')?.value || '').trim();
+  if (!nome) {
+    nota.innerHTML = '<div class="alert alert-warning">Informe o nome do usuário.</div>';
+    return;
+  }
+
+  const dados = {
+    nome,
+    cargo: document.getElementById('us_cargo')?.value || '',
+    setor: document.getElementById('us_setor')?.value || '',
+    email: document.getElementById('us_email')?.value || '',
+    telefone: document.getElementById('us_telefone')?.value || '',
+    obs: document.getElementById('us_obs')?.value || '',
+  };
+
+  let idPersistir;
+  if (STATE.usuarioEditandoId) {
+    const idx = STATE.usuarios.findIndex(u => u.id === STATE.usuarioEditandoId);
+    if (idx > -1) STATE.usuarios[idx] = { id: STATE.usuarioEditandoId, ...dados };
+    idPersistir = STATE.usuarioEditandoId;
+  } else {
+    idPersistir = gerarId('us');
+    STATE.usuarios.push({ id: idPersistir, ...dados });
+  }
+
+  persistirUsuario(idPersistir);
+  STATE.usuarioEditandoId = null;
+  limparFormUsuario();
+  mudarSubView('lista');
+  toastSucesso('Usuário salvo.');
+}
+
+function excluirUsuario(id) {
+  const u = STATE.usuarios.find(x => x.id === id);
+  if (!u) return;
+  if (!confirm('Excluir o usuário "' + (u.nome || '?') + '"?')) return;
+  STATE.usuarios = STATE.usuarios.filter(x => x.id !== id);
+  removerUsuarioDb(id).catch(err => { console.error(err); toastErro('Não consegui remover do banco local — tente novamente.'); });
+  if (STATE.usuarioEditandoId === id) {
+    STATE.usuarioEditandoId = null;
+    limparFormUsuario();
+  }
+  renderTudo();
 }
 
 // ==================== FINANCEIRO ====================
@@ -1178,7 +1384,7 @@ function exportarCSVFinanceiro() {
 function exportarDados() {
   const payload = {
     formato: 'captagov-backup',
-    versao: 2,
+    versao: 3,
     exportadoEm: new Date().toISOString(),
     convenios: STATE.convenios,
     convenioAtualId: STATE.convenioAtualId,
@@ -1186,6 +1392,8 @@ function exportarDados() {
     emendas: STATE.emendas,
     instituicoes: STATE.instituicoes,
     proponentes: STATE.proponentes,
+    responsaveisTecnicos: STATE.responsaveisTecnicos,
+    usuarios: STATE.usuarios,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1305,6 +1513,8 @@ function importarDados(file) {
     STATE.emendas = payload.emendas || [];
     STATE.instituicoes = payload.instituicoes || [];
     STATE.proponentes = payload.proponentes || [];
+    STATE.responsaveisTecnicos = payload.responsaveisTecnicos || [];
+    STATE.usuarios = payload.usuarios || [];
     STATE.convenios.forEach(c => {
       if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
       if (!c.documentosExtras) c.documentosExtras = [];
@@ -1317,6 +1527,8 @@ function importarDados(file) {
       persistirTodasEmendas();
       persistirTodasInstituicoes();
       persistirTodosProponentes();
+      persistirTodosResponsaveisTecnicos();
+      persistirTodosUsuarios();
       persistirMeta();
       renderTudo();
       toastSucesso('Backup importado com sucesso.');
@@ -1366,6 +1578,8 @@ function renderSidebar() {
     { id: 'emendas', icon: '🏛️', label: 'Emendas Parlamentares' },
     { id: 'instituicoes', icon: '🏢', label: 'Instituições' },
     { id: 'proponentes', icon: '🤝', label: 'Proponentes/Convenentes' },
+    { id: 'responsaveisTecnicos', icon: '👷', label: 'Responsável Técnico' },
+    { id: 'usuarios', icon: '👤', label: 'Usuários' },
   ];
   el.innerHTML = `
     <div class="sidebar-header">
@@ -1391,7 +1605,7 @@ function renderSidebar() {
         </label>
         <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="abrirTelaBackups()">🕐 Backups Automáticos</button>
       </div>
-      <div>CaptaGov v2.1 — Dados locais</div>
+      <div>CaptaGov v2.2 — Dados locais</div>
     </div>
   `;
 }
@@ -1403,6 +1617,7 @@ function renderHeader() {
     painel: 'Painel Geral', cadastro: 'Cadastro', prestacao: 'Prestação de Contas',
     documentos: 'Gestão de Documentos', relatorios: 'Relatórios', emendas: 'Emendas Parlamentares',
     instituicoes: 'Instituições', proponentes: 'Proponentes/Convenentes',
+    responsaveisTecnicos: 'Responsável Técnico', usuarios: 'Usuários', backups: 'Backups Automáticos',
   };
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   el.innerHTML = `
@@ -1429,6 +1644,8 @@ function renderBody() {
     case 'instituicoes': el.innerHTML = renderInstituicoes(); break;
     case 'proponentes': el.innerHTML = renderProponentes(); break;
     case 'backups': el.innerHTML = renderBackups(); break;
+    case 'responsaveisTecnicos': el.innerHTML = renderResponsaveisTecnicos(); break;
+    case 'usuarios': el.innerHTML = renderUsuarios(); break;
     default: el.innerHTML = '<div class="empty-state"><div class="empty-state-title">Página em desenvolvimento</div></div>';
   }
 }
@@ -1560,6 +1777,15 @@ function renderCadastro() {
         </div>
         ${ehConvenio ? `
         <div class="form-section-title">🏛️ Proponente (Concedente do Recurso)</div>
+        ${STATE.instituicoes.length > 0 ? `
+        <div class="form-group full-width">
+          <label class="form-label">Preencher com instituição já cadastrada</label>
+          <select class="form-input form-select" onchange="preencherComInstituicao(this.value)">
+            <option value="">— selecionar —</option>
+            ${STATE.instituicoes.map(i => `<option value="${i.id}">${escapeHtml(i.razaoSocial)}</option>`).join('')}
+          </select>
+        </div>
+        ` : ''}
         <div class="form-group">
           <label class="form-label">Esfera do Proponente</label>
           <select class="form-input form-select" id="c_esfera">
@@ -1573,6 +1799,15 @@ function renderCadastro() {
         ` : ''}
 
         <div class="form-section-title">🏢 Dados do Convenente (Prefeitura)</div>
+        ${STATE.proponentes.length > 0 ? `
+        <div class="form-group full-width">
+          <label class="form-label">Preencher com proponente/convenente já cadastrado</label>
+          <select class="form-input form-select" onchange="preencherComProponente(this.value)">
+            <option value="">— selecionar —</option>
+            ${STATE.proponentes.map(p => `<option value="${p.id}">${escapeHtml(p.razaoSocial)}</option>`).join('')}
+          </select>
+        </div>
+        ` : ''}
         <div class="form-group">
           <label class="form-label">Nome / Razão Social <span class="required">*</span></label>
           <input class="form-input" type="text" id="c_conveniente" placeholder="Ex: Prefeitura Municipal de..." />
@@ -1944,7 +2179,8 @@ function renderGestaoDocumentos() {
 function gerarDocumento(tipoId) {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
-  const auto = gerarDocumentoAutomatico(tipoId, c);
+  const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
+  const auto = gerarDocumentoAutomatico(tipoId, c, rt);
   STATE.docGeradoTipo = tipoId;
   STATE.docGeradoTexto = auto || gerarModeloEsqueleto(tipoId) || '';
   STATE.docGeradoEhModelo = !auto;
@@ -2001,6 +2237,15 @@ function renderDocsIA() {
   return `
     <div class="card-title" style="font-size:16px;">Geração de Documentos</div>
     <div class="card-subtitle">Preenchimento automático a partir dos dados do convênio selecionado no Painel — sem IA, 100% offline.</div>
+    ${STATE.responsaveisTecnicos.length > 0 ? `
+    <div class="form-group full-width" style="margin-top:12px;max-width:420px;">
+      <label class="form-label">Responsável técnico (assina Justificativa/Plano de Trabalho)</label>
+      <select class="form-input form-select" onchange="STATE.responsavelTecnicoSelecionadoId=this.value">
+        <option value="">— nenhum (deixar em branco) —</option>
+        ${STATE.responsaveisTecnicos.map(r => `<option value="${r.id}" ${STATE.responsavelTecnicoSelecionadoId === r.id ? 'selected' : ''}>${escapeHtml(r.nome)}${r.cargo ? ' — ' + escapeHtml(r.cargo) : ''}</option>`).join('')}
+      </select>
+    </div>
+    ` : ''}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px;">
       ${TIPOS_DOC_IA.map(t => `
         <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:16px;cursor:pointer;" onclick="gerarDocumento('${t.id}')">
@@ -2472,6 +2717,168 @@ function limparFormProponente() {
   if (nota) nota.innerHTML = '';
 }
 
+function renderResponsaveisTecnicos() {
+  const subTabs = [
+    { id: 'lista', label: 'Lista de Responsáveis Técnicos' },
+    { id: 'form', label: STATE.responsavelTecnicoEditandoId ? 'Editar Responsável Técnico' : 'Novo Responsável Técnico' },
+  ];
+  return `
+    <div class="subtabs">
+      ${subTabs.map(t => `<button class="subtab ${STATE.subView === t.id ? 'active' : ''}" onclick="mudarSubView('${t.id}')">${t.label}</button>`).join('')}
+    </div>
+    <div class="card">
+      ${STATE.subView === 'lista' ? renderResponsavelTecnicoLista() : renderResponsavelTecnicoForm()}
+    </div>
+  `;
+}
+
+function renderResponsavelTecnicoLista() {
+  const busca = document.getElementById('responsavelTecnicoBusca');
+  const termo = busca ? busca.value.trim().toLowerCase() : '';
+  const lista = termo
+    ? STATE.responsaveisTecnicos.filter(r => (r.nome || '').toLowerCase().includes(termo) || (r.numeroRegistro || '').includes(termo))
+    : STATE.responsaveisTecnicos;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:0;">Responsáveis Técnicos (${STATE.responsaveisTecnicos.length})</div>
+      <div style="display:flex;gap:12px;">
+        <div class="search-input">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Buscar responsável técnico..." value="${escapeHtml(termo)}" id="responsavelTecnicoBusca" oninput="renderTudo()" />
+        </div>
+        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Novo Responsável Técnico</button>
+      </div>
+    </div>
+    ${lista.length === 0
+    ? '<div class="empty-state"><div class="empty-state-icon">👷</div><div class="empty-state-title">Nenhum responsável técnico cadastrado</div></div>'
+    : lista.slice().reverse().map(r => `
+        <div class="convenio-card" style="margin-bottom:8px;">
+          <div>
+            <div class="convenio-card-title">${escapeHtml(r.nome || '?')}</div>
+            <div class="convenio-card-sub">${escapeHtml(r.conselho || 'CREA')} ${escapeHtml(r.numeroRegistro || '(sem nº)')}${r.cargo ? ' · ' + escapeHtml(r.cargo) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button class="btn btn-ghost btn-sm" onclick="editarResponsavelTecnico('${r.id}')">Editar</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="excluirResponsavelTecnico('${r.id}')">🗑</button>
+          </div>
+        </div>
+      `).join('')}
+  `;
+}
+
+function renderResponsavelTecnicoForm() {
+  return `
+    <div class="card-title" style="font-size:16px;">${STATE.responsavelTecnicoEditandoId ? 'Editar' : 'Novo'} Responsável Técnico</div>
+    <div id="responsavelTecnicoNote"></div>
+    <div class="form-grid" style="margin-top:16px;">
+      <div class="form-group full-width"><label class="form-label">Nome <span class="required">*</span></label><input class="form-input" id="rt_nome" /></div>
+      <div class="form-group"><label class="form-label">Cargo / Função</label><input class="form-input" id="rt_cargo" placeholder="Ex: Engenheiro Civil" /></div>
+      <div class="form-group">
+        <label class="form-label">Conselho</label>
+        <select class="form-input form-select" id="rt_conselho">
+          <option>CREA</option><option>CAU</option><option>CRM</option><option>CRC</option><option>Outro</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Nº de Registro</label><input class="form-input" id="rt_numeroRegistro" placeholder="Ex: 12345-D/PE" /></div>
+      <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="rt_cpf" maxlength="14" oninput="mascararCPF(this)" placeholder="000.000.000-00" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="rt_telefone" /></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="rt_email" type="email" /></div>
+      <div class="form-group full-width"><label class="form-label">Observações</label><input class="form-input" id="rt_obs" /></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px;">
+      <button class="btn btn-primary btn-lg" onclick="salvarResponsavelTecnico()">💾 Salvar Responsável Técnico</button>
+      <button class="btn btn-secondary btn-lg" onclick="mudarSubView('lista')">Cancelar</button>
+    </div>
+  `;
+}
+
+function limparFormResponsavelTecnico() {
+  ['rt_nome', 'rt_cargo', 'rt_numeroRegistro', 'rt_cpf', 'rt_telefone', 'rt_email', 'rt_obs']
+    .forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
+  const nota = document.getElementById('responsavelTecnicoNote');
+  if (nota) nota.innerHTML = '';
+}
+
+function renderUsuarios() {
+  const subTabs = [
+    { id: 'lista', label: 'Lista de Usuários' },
+    { id: 'form', label: STATE.usuarioEditandoId ? 'Editar Usuário' : 'Novo Usuário' },
+  ];
+  return `
+    <div class="subtabs">
+      ${subTabs.map(t => `<button class="subtab ${STATE.subView === t.id ? 'active' : ''}" onclick="mudarSubView('${t.id}')">${t.label}</button>`).join('')}
+    </div>
+    <div class="card">
+      ${STATE.subView === 'lista' ? renderUsuarioLista() : renderUsuarioForm()}
+    </div>
+  `;
+}
+
+function renderUsuarioLista() {
+  const busca = document.getElementById('usuarioBusca');
+  const termo = busca ? busca.value.trim().toLowerCase() : '';
+  const lista = termo
+    ? STATE.usuarios.filter(u => (u.nome || '').toLowerCase().includes(termo) || (u.email || '').toLowerCase().includes(termo))
+    : STATE.usuarios;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:0;">Usuários (${STATE.usuarios.length})</div>
+      <div style="display:flex;gap:12px;">
+        <div class="search-input">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Buscar usuário..." value="${escapeHtml(termo)}" id="usuarioBusca" oninput="renderTudo()" />
+        </div>
+        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Novo Usuário</button>
+      </div>
+    </div>
+    <div class="alert alert-info" style="margin-bottom:16px;">
+      Este cadastro é só um registro de pessoas pra identificar quem elaborou/assina os documentos — não é login nem controla acesso ao sistema.
+    </div>
+    ${lista.length === 0
+    ? '<div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-title">Nenhum usuário cadastrado</div></div>'
+    : lista.slice().reverse().map(u => `
+        <div class="convenio-card" style="margin-bottom:8px;">
+          <div>
+            <div class="convenio-card-title">${escapeHtml(u.nome || '?')}</div>
+            <div class="convenio-card-sub">${u.cargo ? escapeHtml(u.cargo) : 'Cargo não informado'}${u.setor ? ' · ' + escapeHtml(u.setor) : ''}${u.email ? ' · ' + escapeHtml(u.email) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button class="btn btn-ghost btn-sm" onclick="editarUsuario('${u.id}')">Editar</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="excluirUsuario('${u.id}')">🗑</button>
+          </div>
+        </div>
+      `).join('')}
+  `;
+}
+
+function renderUsuarioForm() {
+  return `
+    <div class="card-title" style="font-size:16px;">${STATE.usuarioEditandoId ? 'Editar' : 'Novo'} Usuário</div>
+    <div id="usuarioNote"></div>
+    <div class="form-grid" style="margin-top:16px;">
+      <div class="form-group full-width"><label class="form-label">Nome <span class="required">*</span></label><input class="form-input" id="us_nome" /></div>
+      <div class="form-group"><label class="form-label">Cargo / Função</label><input class="form-input" id="us_cargo" /></div>
+      <div class="form-group"><label class="form-label">Setor</label><input class="form-input" id="us_setor" /></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="us_email" type="email" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="us_telefone" /></div>
+      <div class="form-group full-width"><label class="form-label">Observações</label><input class="form-input" id="us_obs" /></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px;">
+      <button class="btn btn-primary btn-lg" onclick="salvarUsuario()">💾 Salvar Usuário</button>
+      <button class="btn btn-secondary btn-lg" onclick="mudarSubView('lista')">Cancelar</button>
+    </div>
+  `;
+}
+
+function limparFormUsuario() {
+  ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs']
+    .forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
+  const nota = document.getElementById('usuarioNote');
+  if (nota) nota.innerHTML = '';
+}
+
 function limparFormEmenda() {
   ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
     const el = document.getElementById(k);
@@ -2793,16 +3200,19 @@ Object.assign(window, {
   abrirPrestacaoContas, abrirTelaBackups, adicionarContratada, adicionarDocExtra, anexarDocExtra,
   anexarDocPagamento, baixarDocumentoGerado, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
-  editarEmenda, editarInstituicao, editarProponente, escapeHtml, excluirConvenio, excluirEmenda,
-  excluirInstituicao, excluirProponente, exportarAnexosZIP,
+  editarEmenda, editarInstituicao, editarProponente, editarResponsavelTecnico, editarUsuario,
+  escapeHtml, excluirConvenio, excluirEmenda,
+  excluirInstituicao, excluirProponente, excluirResponsavelTecnico, excluirUsuario, exportarAnexosZIP,
   exportarCSVFinanceiro, exportarDados, fecharDocumentoGerado, gerarDocumento,
   gerarPDFRelatorio, importarDados, lancarExtrato, lancarRendimento,
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
-  mudarTipoEmenda, mudarView, novoConvenio, registrarPagamento,
+  mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
+  registrarPagamento,
   removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerExtrato, removerPagamento,
   removerRendimento, renderTudo, restaurarSnapshotAuto, excluirSnapshotAuto,
   salvarConvenio, salvarEmenda, salvarInstituicao, salvarProponente,
+  salvarResponsavelTecnico, salvarUsuario,
   toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
 });

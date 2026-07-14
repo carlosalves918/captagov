@@ -75,7 +75,7 @@ _________________________________
 [Cargo/Setor]`;
 }
 
-function gerarJustificativaTecnica(c) {
+function gerarJustificativaTecnica(c, rt) {
   const { valor } = cabecalhoConvenio(c);
   return `JUSTIFICATIVA TÉCNICA
 
@@ -103,14 +103,17 @@ O valor total estimado é de ${valor}${c.contrapartida ? ', com contrapartida mu
 ${c.municipioProp || '[Município]'}, ${hojeFormatado()}.
 
 _________________________________
-[Nome do responsável técnico]
-[Cargo]`;
+${rt ? rt.nome : '[Nome do responsável técnico]'}
+${rt ? (rt.cargo || (rt.conselho && rt.numeroRegistro ? rt.conselho + ' ' + rt.numeroRegistro : '[cargo]')) : '[cargo]'}`;
 }
 
-function gerarPlanoTrabalho(c) {
+function gerarPlanoTrabalho(c, rt) {
   const valor = formatMoeda(parseMoeda(c.valor || '0'));
   const contrapartida = c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : 'R$ 0,00';
   const valorTotal = formatMoeda(parseMoeda(c.valor || '0') + parseMoeda(c.contrapartida || '0'));
+  const responsavelLinha = rt
+    ? `${rt.nome}${rt.cargo ? ' — ' + rt.cargo : ''}${rt.numeroRegistro ? ' (' + (rt.conselho || 'CREA') + ' ' + rt.numeroRegistro + ')' : ''}`
+    : '[nome do responsável] — [cargo]';
   return `PLANO DE TRABALHO
 
 Dados Cadastrais da Prefeitura
@@ -125,7 +128,7 @@ Dados Cadastrais da Prefeitura
 1.7 Esfera Administrativa: ${c.esfera || 'Municipal'}
 1.8 Fone: ${c.telefoneInst || '[telefone]'}
 1.9 E-mail: ${c.emailInst || '[e-mail]'}
-1.10 Responsável e Cargo: [nome do responsável] — [cargo]
+1.10 Responsável e Cargo: ${responsavelLinha}
 1.11 Nº Emenda: [se houver, informar o número da emenda parlamentar]
 
 Elaboração do Projeto
@@ -179,8 +182,8 @@ Dados da conta bancária: Agência nº ${c.agencia || '[agência]'} — Conta n�
 ${c.municipioProp || '[Município]'}, ${hojeFormatado()}.
 
 _________________________________
-[Nome do responsável técnico/Secretário(a)]
-[Cargo]
+${rt ? rt.nome : '[Nome do responsável técnico/Secretário(a)]'}
+${rt ? (rt.cargo || (rt.conselho && rt.numeroRegistro ? rt.conselho + ' ' + rt.numeroRegistro : '[cargo]')) : '[cargo]'}
 
 _________________________________
 [Nome do(a) Prefeito(a)]
@@ -195,10 +198,10 @@ const GERADORES = {
 };
 
 /** Gera o texto do documento a partir dos dados reais do convênio. Retorna null se o tipo não tem autopreenchimento. */
-export function gerarDocumentoAutomatico(tipoId, convenio) {
+export function gerarDocumentoAutomatico(tipoId, convenio, responsavelTecnico) {
   const gerador = GERADORES[tipoId];
   if (!gerador || !convenio) return null;
-  return gerador(convenio);
+  return gerador(convenio, responsavelTecnico);
 }
 
 // Modelos estruturados (esqueleto) para os documentos que exigem análise
