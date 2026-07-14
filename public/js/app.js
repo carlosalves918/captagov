@@ -149,8 +149,9 @@ function calcularResumoFinanceiro(id) {
   const totalUsoRendimento = (f.usos || []).reduce((a, u) => a + (u.valor || 0), 0);
   const saldoRendimento = totalRendimento - totalUsoRendimento;
   const totalPago = (f.pagamentos || []).reduce((a, p) => a + (p.valor || 0), 0);
+  const totalContratado = (f.contratadas || []).reduce((a, ct) => a + parseMoeda(ct.valorContrato || '0'), 0);
   const saldoTotal = valorTotal + movExtrato + totalRendimento - totalUsoRendimento - totalPago;
-  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, saldoTotal, fin: f };
+  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, fin: f };
 }
 
 async function carregarEstado() {
@@ -1937,8 +1938,8 @@ function renderPrestacaoContas() {
         </div>
         ` : ''}
         <div class="fin-summary-card">
-          <div class="fin-summary-label">Movimento Extrato</div>
-          <div class="fin-summary-value ${resumo.movExtrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.movExtrato)}</div>
+          <div class="fin-summary-label">Valor Contratado</div>
+          <div class="fin-summary-value">${formatMoeda(resumo.totalContratado)}</div>
         </div>
         <div class="fin-summary-card">
           <div class="fin-summary-label">Total Pago</div>
@@ -2411,7 +2412,7 @@ function renderRelatorioFinanceiro(c) {
       <div class="card-subtitle">Convenente: ${escapeHtml(c.conveniente || c.proponente || '?')} · Repasse: ${formatMoeda(resumo.valor)}${resumo.contrapartida > 0 ? ' · Contrapartida: ' + formatMoeda(resumo.contrapartida) + ' · Total: ' + formatMoeda(resumo.valorTotal) : ''}</div>
 
       <div class="fin-summary-grid">
-        <div class="fin-summary-card"><div class="fin-summary-label">Movimento Extrato</div><div class="fin-summary-value ${resumo.movExtrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.movExtrato)}</div></div>
+        <div class="fin-summary-card"><div class="fin-summary-label">Valor Contratado</div><div class="fin-summary-value">${formatMoeda(resumo.totalContratado)}</div></div>
         <div class="fin-summary-card"><div class="fin-summary-label">Rendimento</div><div class="fin-summary-value">${formatMoeda(resumo.totalRendimento)}</div></div>
         <div class="fin-summary-card"><div class="fin-summary-label">Total Pago</div><div class="fin-summary-value negative">${formatMoeda(resumo.totalPago)}</div></div>
         <div class="fin-summary-card"><div class="fin-summary-label">Saldo Total</div><div class="fin-summary-value ${resumo.saldoTotal >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.saldoTotal)}</div></div>
