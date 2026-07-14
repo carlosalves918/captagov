@@ -36,6 +36,9 @@ const STATE = {
   responsavelTecnicoEditandoId: null,
   usuarioEditandoId: null,
   responsavelTecnicoSelecionadoId: null,
+  usuarioSelecionadoId: null,
+  convenioInstituicaoIdSelecionada: null,
+  convenioProponenteIdSelecionada: null,
   contratadaEditandoId: null,
   protocoloSeq: 0,
   view: 'painel',
@@ -185,18 +188,20 @@ function mudarSubView(sub) {
 }
 
 function preencherComInstituicao(id) {
-  if (!id) return;
+  if (!id) { STATE.convenioInstituicaoIdSelecionada = null; return; }
   const i = STATE.instituicoes.find(x => x.id === id);
   if (!i) return;
+  STATE.convenioInstituicaoIdSelecionada = id;
   const orgao = document.getElementById('c_orgao');
   if (orgao) orgao.value = i.nomeFantasia || i.razaoSocial || '';
-  toastSucesso('Dados da instituição preenchidos.');
+  toastSucesso('Dados da instituição preenchidos e vínculo salvo — se você editar o cadastro dela depois, use "Ressincronizar" pra atualizar este convênio.');
 }
 
 function preencherComProponente(id) {
-  if (!id) return;
+  if (!id) { STATE.convenioProponenteIdSelecionada = null; return; }
   const p = STATE.proponentes.find(x => x.id === id);
   if (!p) return;
+  STATE.convenioProponenteIdSelecionada = id;
   const mapa = {
     c_conveniente: p.razaoSocial, c_cnpj: p.documento, c_cep: p.cep, c_logradouro: p.logradouro,
     c_bairro: p.bairro, c_municipio: p.municipio, c_telefone: p.telefone, c_email: p.email,
@@ -208,7 +213,7 @@ function preencherComProponente(id) {
   });
   const natEl = document.getElementById('c_natureza');
   if (natEl && [...natEl.options].some(o => o.value === p.natureza)) natEl.value = p.natureza;
-  toastSucesso('Dados do proponente/convenente preenchidos.');
+  toastSucesso('Dados do proponente/convenente preenchidos e vínculo salvo — se você editar o cadastro dele depois, use "Ressincronizar" pra atualizar este convênio.');
 }
 
 // ==================== CRUD CONVÊNIOS ====================
@@ -243,6 +248,8 @@ function novoConvenio(tipo) {
   STATE.convenioEditandoId = null;
   STATE.tipoInstrumento = tipo || 'convenio';
   STATE.cadastroMensagem = null;
+  STATE.convenioInstituicaoIdSelecionada = null;
+  STATE.convenioProponenteIdSelecionada = null;
   limparFormConvenio();
   mudarView('cadastro');
 }
@@ -254,6 +261,8 @@ function editarConvenio(id) {
   STATE.convenioAtualId = id;
   STATE.tipoInstrumento = c.tipo || 'convenio';
   STATE.cadastroMensagem = null;
+  STATE.convenioInstituicaoIdSelecionada = c.instituicaoId || null;
+  STATE.convenioProponenteIdSelecionada = c.proponenteId || null;
   // Compatibilidade com registros antigos: "Federal" agora é "União"; dado antigo de proponente vira conveniente
   const esferaNormalizada = c.esfera === 'Federal' ? 'União' : (c.esfera === 'Estadual' ? 'Estado' : c.esfera);
   setFormData({
@@ -312,6 +321,8 @@ function salvarConvenio() {
     valor: form.c_valor, contrapartida: form.c_contrapartida,
     dataAssinatura: form.c_data_assinatura, dataInicio, dataFim,
     prazoPC: form.c_prazo_pc, prazoLimitePC,
+    instituicaoId: STATE.convenioInstituicaoIdSelecionada || null,
+    proponenteId: STATE.convenioProponenteIdSelecionada || null,
   };
 
   if (STATE.convenioEditandoId) {
@@ -1780,10 +1791,13 @@ function renderCadastro() {
         ${STATE.instituicoes.length > 0 ? `
         <div class="form-group full-width">
           <label class="form-label">Preencher com instituição já cadastrada</label>
-          <select class="form-input form-select" onchange="preencherComInstituicao(this.value)">
-            <option value="">— selecionar —</option>
-            ${STATE.instituicoes.map(i => `<option value="${i.id}">${escapeHtml(i.razaoSocial)}</option>`).join('')}
-          </select>
+          <div style="display:flex;gap:8px;">
+            <select class="form-input form-select" onchange="preencherComInstituicao(this.value)" style="flex:1;">
+              <option value="">— selecionar —</option>
+              ${STATE.instituicoes.map(i => `<option value="${i.id}" ${STATE.convenioInstituicaoIdSelecionada === i.id ? 'selected' : ''}>${escapeHtml(i.razaoSocial)}</option>`).join('')}
+            </select>
+            ${STATE.convenioInstituicaoIdSelecionada ? `<button type="button" class="btn btn-secondary btn-sm" onclick="preencherComInstituicao('${STATE.convenioInstituicaoIdSelecionada}')" title="Puxar de novo os dados atuais do cadastro">🔄 Ressincronizar</button>` : ''}
+          </div>
         </div>
         ` : ''}
         <div class="form-group">
@@ -1802,10 +1816,13 @@ function renderCadastro() {
         ${STATE.proponentes.length > 0 ? `
         <div class="form-group full-width">
           <label class="form-label">Preencher com proponente/convenente já cadastrado</label>
-          <select class="form-input form-select" onchange="preencherComProponente(this.value)">
-            <option value="">— selecionar —</option>
-            ${STATE.proponentes.map(p => `<option value="${p.id}">${escapeHtml(p.razaoSocial)}</option>`).join('')}
-          </select>
+          <div style="display:flex;gap:8px;">
+            <select class="form-input form-select" onchange="preencherComProponente(this.value)" style="flex:1;">
+              <option value="">— selecionar —</option>
+              ${STATE.proponentes.map(p => `<option value="${p.id}" ${STATE.convenioProponenteIdSelecionada === p.id ? 'selected' : ''}>${escapeHtml(p.razaoSocial)}</option>`).join('')}
+            </select>
+            ${STATE.convenioProponenteIdSelecionada ? `<button type="button" class="btn btn-secondary btn-sm" onclick="preencherComProponente('${STATE.convenioProponenteIdSelecionada}')" title="Puxar de novo os dados atuais do cadastro">🔄 Ressincronizar</button>` : ''}
+          </div>
         </div>
         ` : ''}
         <div class="form-group">
@@ -2180,9 +2197,10 @@ function gerarDocumento(tipoId) {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
   const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
-  const auto = gerarDocumentoAutomatico(tipoId, c, rt);
+  const usuario = STATE.usuarios.find(x => x.id === STATE.usuarioSelecionadoId) || null;
+  const auto = gerarDocumentoAutomatico(tipoId, c, rt, usuario);
   STATE.docGeradoTipo = tipoId;
-  STATE.docGeradoTexto = auto || gerarModeloEsqueleto(tipoId) || '';
+  STATE.docGeradoTexto = auto || gerarModeloEsqueleto(tipoId, c, rt, usuario) || '';
   STATE.docGeradoEhModelo = !auto;
   renderTudo();
 }
@@ -2243,6 +2261,15 @@ function renderDocsIA() {
       <select class="form-input form-select" onchange="STATE.responsavelTecnicoSelecionadoId=this.value">
         <option value="">— nenhum (deixar em branco) —</option>
         ${STATE.responsaveisTecnicos.map(r => `<option value="${r.id}" ${STATE.responsavelTecnicoSelecionadoId === r.id ? 'selected' : ''}>${escapeHtml(r.nome)}${r.cargo ? ' — ' + escapeHtml(r.cargo) : ''}</option>`).join('')}
+      </select>
+    </div>
+    ` : ''}
+    ${STATE.usuarios.length > 0 ? `
+    <div class="form-group full-width" style="margin-top:12px;max-width:420px;">
+      <label class="form-label">Elaborado por (usuário)</label>
+      <select class="form-input form-select" onchange="STATE.usuarioSelecionadoId=this.value">
+        <option value="">— nenhum (deixar em branco) —</option>
+        ${STATE.usuarios.map(u => `<option value="${u.id}" ${STATE.usuarioSelecionadoId === u.id ? 'selected' : ''}>${escapeHtml(u.nome)}${u.cargo ? ' — ' + escapeHtml(u.cargo) : ''}</option>`).join('')}
       </select>
     </div>
     ` : ''}
@@ -2311,6 +2338,15 @@ function renderRelatorios() {
       <button class="btn btn-primary" onclick="gerarPDFRelatorio()">📥 Gerar PDF</button>
       <button class="btn btn-secondary" onclick="exportarCSVFinanceiro()">📊 Exportar CSV</button>
       <button class="btn btn-secondary" onclick="exportarAnexosZIP()">📦 Exportar Tudo (ZIP)</button>
+      ${STATE.usuarios.length > 0 ? `
+      <div class="form-group" style="min-width:220px;margin-bottom:0;">
+        <label class="form-label">Emitido por</label>
+        <select class="form-input form-select" onchange="STATE.usuarioSelecionadoId=this.value">
+          <option value="">— nenhum —</option>
+          ${STATE.usuarios.map(u => `<option value="${u.id}" ${STATE.usuarioSelecionadoId === u.id ? 'selected' : ''}>${escapeHtml(u.nome)}</option>`).join('')}
+        </select>
+      </div>
+      ` : ''}
     </div>
 
     ${!c ? '<div class="empty-state"><div class="empty-state-icon">📈</div><div class="empty-state-title">Selecione um convênio</div><div class="empty-state-text">Escolha um convênio acima para visualizar os relatórios.</div></div>' : `
@@ -3179,6 +3215,7 @@ function gerarPDFRelatorio() {
   }
 
   // Rodapé
+  const usuarioEmissor = STATE.usuarios.find(u => u.id === STATE.usuarioSelecionadoId);
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -3186,6 +3223,9 @@ function gerarPDFRelatorio() {
     doc.setTextColor(...GRAY);
     doc.text('CaptaGov — Relatório Financeiro — Página ' + i + ' de ' + totalPages, M, 290, { align: 'left' });
     doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR'), W - M, 290, { align: 'right' });
+    if (usuarioEmissor) {
+      doc.text('Emitido por: ' + usuarioEmissor.nome, M, 294);
+    }
   }
 
   doc.save('relatorio-' + (c.numero || 'convenio') + '.pdf');

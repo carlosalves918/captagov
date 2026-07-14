@@ -198,10 +198,12 @@ const GERADORES = {
 };
 
 /** Gera o texto do documento a partir dos dados reais do convênio. Retorna null se o tipo não tem autopreenchimento. */
-export function gerarDocumentoAutomatico(tipoId, convenio, responsavelTecnico) {
+export function gerarDocumentoAutomatico(tipoId, convenio, responsavelTecnico, usuario) {
   const gerador = GERADORES[tipoId];
   if (!gerador || !convenio) return null;
-  return gerador(convenio, responsavelTecnico);
+  let texto = gerador(convenio, responsavelTecnico);
+  if (usuario) texto += `\n\nElaborado por: ${usuario.nome}${usuario.cargo ? ' — ' + usuario.cargo : ''}`;
+  return texto;
 }
 
 // Modelos estruturados (esqueleto) para os documentos que exigem análise
@@ -272,6 +274,24 @@ Plano 5W2H
 | | | | | | | |`,
 };
 
-export function gerarModeloEsqueleto(tipoId) {
-  return MODELOS_ESQUELETO[tipoId] || null;
+export function gerarModeloEsqueleto(tipoId, convenio, responsavelTecnico, usuario) {
+  const corpo = MODELOS_ESQUELETO[tipoId];
+  if (!corpo) return null;
+  if (!convenio) return corpo; // fallback antigo, sem contexto nenhum
+
+  const cabecalho = `${convenio.tipo === 'projeto' ? 'Projeto' : 'Convênio'}: ${convenio.numero || '[número]'} — Conveniente: ${convenio.conveniente || '[conveniente]'}\n\n`;
+  const rodape = montarRodapeAssinatura(convenio, responsavelTecnico, usuario);
+  return cabecalho + corpo + rodape;
+}
+
+/** Monta o bloco final comum a todos os documentos: local/data, assinatura do responsável técnico e "elaborado por". */
+function montarRodapeAssinatura(c, rt, usuario) {
+  let bloco = `\n\n${c.municipioProp || '[Município]'}, ${hojeFormatado()}.`;
+  if (rt) {
+    bloco += `\n\n_________________________________\n${rt.nome}\n${rt.cargo || (rt.conselho && rt.numeroRegistro ? rt.conselho + ' ' + rt.numeroRegistro : '')}`;
+  }
+  if (usuario) {
+    bloco += `\n\nElaborado por: ${usuario.nome}${usuario.cargo ? ' — ' + usuario.cargo : ''}`;
+  }
+  return bloco;
 }
