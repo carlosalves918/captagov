@@ -940,16 +940,44 @@ function adicionarContratada() {
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
+
   const nome = document.getElementById('ct_razao')?.value.trim();
   const cnpj = document.getElementById('ct_cnpj')?.value.trim();
   if (!nome) { toastAviso('Informe a razão social.'); return; }
+
   const numeroContrato = document.getElementById('ct_numero')?.value || '';
   const valorContrato = document.getElementById('ct_valorContrato')?.value || '';
 
   const fileInput = document.getElementById('ct_anexo');
-  const file = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+  const fileExtratoInput = document.getElementById('ct_anexo_extrato');
 
-  const salvar = (contratoArquivo, contratoArquivoDataUrl) => {
+  const file = fileInput?.files?.[0];
+  const fileExtrato = fileExtratoInput?.files?.[0];
+
+  const processarArquivos = async () => {
+    let contratoArquivo = null;
+    let contratoArquivoDataUrl = null;
+    let extratoArquivo = null;
+    let extratoArquivoDataUrl = null;
+
+    if (file) {
+      contratoArquivo = file.name;
+      contratoArquivoDataUrl = await new Promise(res => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.readAsDataURL(file);
+      });
+    }
+
+    if (fileExtrato) {
+      extratoArquivo = fileExtrato.name;
+      extratoArquivoDataUrl = await new Promise(res => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.readAsDataURL(fileExtrato);
+      });
+    }
+
     if (STATE.contratadaEditandoId) {
       const ct = c.financeiro.contratadas.find(x => x.id === STATE.contratadaEditandoId);
       if (ct) {
@@ -961,30 +989,31 @@ function adicionarContratada() {
           ct.contratoArquivo = contratoArquivo;
           ct.contratoArquivoDataUrl = contratoArquivoDataUrl;
         }
+        if (extratoArquivo) {
+          ct.extratoArquivo = extratoArquivo;
+          ct.extratoArquivoDataUrl = extratoArquivoDataUrl;
+        }
       }
       STATE.contratadaEditandoId = null;
     } else {
       c.financeiro.contratadas.push({
-        id: gerarId('ct'), razaoSocial: nome, cnpj, numeroContrato, valorContrato,
-        contratoArquivo: contratoArquivo || null,
-        contratoArquivoDataUrl: contratoArquivoDataUrl || null,
+        id: gerarId('ct'),
+        razaoSocial: nome,
+        cnpj,
+        numeroContrato,
+        valorContrato,
+        contratoArquivo,
+        contratoArquivoDataUrl,
+        extratoArquivo,
+        extratoArquivoDataUrl
       });
     }
+
     salvarEstado();
-    document.getElementById('ct_razao').value = '';
-    document.getElementById('ct_cnpj').value = '';
-    document.getElementById('ct_numero').value = '';
-    document.getElementById('ct_valorContrato').value = '';
     renderFinanceiro();
   };
 
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = () => salvar(file.name, reader.result);
-    reader.readAsDataURL(file);
-  } else {
-    salvar(null, null);
-  }
+  processarArquivos();
 }
 
 function editarContratada(id) {
@@ -995,15 +1024,9 @@ function editarContratada(id) {
   if (!ct) return;
   STATE.contratadaEditandoId = id;
   renderFinanceiro();
-  const razaoEl = document.getElementById('ct_razao');
-  if (razaoEl) razaoEl.value = ct.razaoSocial || '';
-  const cnpjEl = document.getElementById('ct_cnpj');
-  if (cnpjEl) cnpjEl.value = ct.cnpj || '';
-  const numEl = document.getElementById('ct_numero');
-  if (numEl) numEl.value = ct.numeroContrato || '';
-  const valEl = document.getElementById('ct_valorContrato');
-  if (valEl) valEl.value = ct.valorContrato || '';
-  razaoEl?.focus();
+  // O preenchimento dos campos agora é feito via template string no renderContratadas
+  // para garantir persistência mesmo com re-renders do React/MainBody.
+  setTimeout(() => document.getElementById('ct_razao')?.focus(), 50);
 }
 
 function cancelarEdicaoContratada() {
@@ -1961,28 +1984,48 @@ function renderContratadas(c) {
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">${editando ? 'Editar Contratada' : 'Adicionar Contratada'}</div>
       <div class="card-subtitle">Cadastre empresas contratadas para vincular pagamentos.</div>
+      
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
-        <div class="form-group"><label class="form-label">Razão Social <span class="required">*</span></label><input class="form-input" id="ct_razao" /></div>
-        <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" id="ct_cnpj" maxlength="18" oninput="mascararCNPJ(this)" /></div>
-        <div class="form-group"><label class="form-label">Nº Contrato</label><input class="form-input" id="ct_numero" /></div>
-        <div class="form-group"><label class="form-label">Valor Contrato</label><input class="form-input" id="ct_valorContrato" oninput="mascararValor(this)" inputmode="numeric" /></div>
+        <div class="form-group">
+          <label class="form-label">Razão Social <span class="required">*</span></label>
+          <input class="form-input" id="ct_razao" value="${escapeHtml(editando?.razaoSocial || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">CNPJ</label>
+          <input class="form-input" id="ct_cnpj" maxlength="18" oninput="mascararCNPJ(this)" value="${escapeHtml(editando?.cnpj || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nº Contrato</label>
+          <input class="form-input" id="ct_numero" value="${escapeHtml(editando?.numeroContrato || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor Contrato</label>
+          <input class="form-input" id="ct_valorContrato" oninput="mascararValor(this)" inputmode="numeric" value="${escapeHtml(editando?.valorContrato || '')}" />
+        </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary" style="height:42px;" onclick="adicionarContratada()">${editando ? '💾 Salvar' : '+ Adicionar'}</button>
           ${editando ? `<button class="btn btn-secondary" style="height:42px;" onclick="cancelarEdicaoContratada()">Cancelar</button>` : ''}
         </div>
       </div>
-      <div style="margin-top:12px;max-width:320px;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;max-width:800px;">
         <div class="form-group">
           <label class="form-label">Anexar Contrato (PDF/imagem)</label>
           <input class="form-input" type="file" id="ct_anexo" accept=".pdf,.jpg,.jpeg,.png" />
+          ${editando && editando.contratoArquivo ? `<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">📎 Atual: ${escapeHtml(editando.contratoArquivo)}</div>` : ''}
         </div>
-        ${editando && editando.contratoArquivo ? `<div style="font-size:12px;color:var(--gray-500);">📎 Já anexado: ${escapeHtml(editando.contratoArquivo)} (selecione outro arquivo para substituir)</div>` : ''}
+        <div class="form-group">
+          <label class="form-label">Anexar Extrato do Contrato (PDF/imagem)</label>
+          <input class="form-input" type="file" id="ct_anexo_extrato" accept=".pdf,.jpg,.jpeg,.png" />
+          ${editando && editando.extratoArquivo ? `<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">📎 Atual: ${escapeHtml(editando.extratoArquivo)}</div>` : ''}
+        </div>
       </div>
     </div>
+
     ${fin.contratadas && fin.contratadas.length > 0 ? `
       <div class="table-wrapper">
         <table class="table-comfortable">
-          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th>Contrato</th><th></th></tr></thead>
+          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th>Anexos</th><th></th></tr></thead>
           <tbody>
             ${fin.contratadas.map(ct => `
               <tr${STATE.contratadaEditandoId === ct.id ? ' style="background:var(--blue-100);"' : ''}>
@@ -1990,10 +2033,16 @@ function renderContratadas(c) {
                 <td style="white-space:nowrap;">${escapeHtml(ct.cnpj || '—')}</td>
                 <td style="white-space:nowrap;">${escapeHtml(ct.numeroContrato || '—')}</td>
                 <td class="font-mono" style="white-space:nowrap;">${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</td>
-                <td style="max-width:220px;">
-                  ${ct.contratoArquivo && ct.contratoArquivoDataUrl
-                    ? `<a href="${ct.contratoArquivoDataUrl}" download="${escapeHtml(ct.contratoArquivo)}" class="btn btn-ghost btn-sm td-truncate" style="max-width:100%;" title="${escapeHtml(ct.contratoArquivo)}">⬇ ${escapeHtml(ct.contratoArquivo)}</a>`
-                    : '<span class="badge badge-warn">Sem anexo</span>'}
+                <td>
+                  <div style="display:flex;flex-direction:column;gap:4px;">
+                    ${ct.contratoArquivo && ct.contratoArquivoDataUrl
+                      ? `<a href="${ct.contratoArquivoDataUrl}" download="${escapeHtml(ct.contratoArquivo)}" class="btn btn-ghost btn-sm td-truncate" style="justify-content:flex-start;padding:2px 4px;" title="Contrato: ${escapeHtml(ct.contratoArquivo)}">📄 Contrato</a>`
+                      : '<span style="font-size:10px;color:var(--gray-400);">Sem contrato</span>'}
+                    
+                    ${ct.extratoArquivo && ct.extratoArquivoDataUrl
+                      ? `<a href="${ct.extratoArquivoDataUrl}" download="${escapeHtml(ct.extratoArquivo)}" class="btn btn-ghost btn-sm td-truncate" style="justify-content:flex-start;padding:2px 4px;" title="Extrato: ${escapeHtml(ct.extratoArquivo)}">📄 Extrato</a>`
+                      : '<span style="font-size:10px;color:var(--gray-400);">Sem extrato</span>'}
+                  </div>
                 </td>
                 <td style="white-space:nowrap;">
                   <div class="td-actions">
