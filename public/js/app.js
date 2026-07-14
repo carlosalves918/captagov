@@ -263,6 +263,9 @@ function editarConvenio(id) {
   STATE.cadastroMensagem = null;
   STATE.convenioInstituicaoIdSelecionada = c.instituicaoId || null;
   STATE.convenioProponenteIdSelecionada = c.proponenteId || null;
+  // O formulário só existe no DOM depois do render — por isso precisa
+  // mudar de tela ANTES de preencher os campos (senão fica tudo em branco).
+  mudarView('cadastro');
   // Compatibilidade com registros antigos: "Federal" agora é "União"; dado antigo de proponente vira conveniente
   const esferaNormalizada = c.esfera === 'Federal' ? 'União' : (c.esfera === 'Estadual' ? 'Estado' : c.esfera);
   setFormData({
@@ -277,8 +280,6 @@ function editarConvenio(id) {
     c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
     c_data_fim: c.dataFim, c_prazo_pc: c.prazoPC || '60',
   });
-  salvarEstado();
-  mudarView('cadastro');
 }
 
 function salvarConvenio() {
