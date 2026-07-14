@@ -286,7 +286,7 @@ function duplicarConvenio(id) {
 
 function abrirPrestacaoContas(id) {
   const c = STATE.convenios.find(x => x.id === id);
-  if (c && c.tipo === 'projeto') return;
+  if (c && c.tipo === 'projeto') { toastAviso('Projetos não têm prestação de contas — apenas Convênios.'); return; }
   STATE.convenioAtualId = id;
   STATE.subView = 'contratadas';
   salvarEstado();
@@ -1029,12 +1029,10 @@ function renderTudo() {
 function renderSidebar() {
   const el = document.getElementById('sidebar');
   if (!el) return;
-  const atual = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
-  const ehProjetoAtual = atual && atual.tipo === 'projeto';
   const items = [
     { id: 'painel', icon: '📊', label: 'Painel Geral' },
     { id: 'cadastro', icon: '📝', label: 'Cadastro' },
-    ...(ehProjetoAtual ? [] : [{ id: 'prestacao', icon: '📋', label: 'Prestação de Contas' }]),
+    { id: 'prestacao', icon: '📋', label: 'Prestação de Contas' },
     { id: 'documentos', icon: '📁', label: 'Gestão de Documentos' },
     { id: 'relatorios', icon: '📈', label: 'Relatórios' },
     { id: 'emendas', icon: '🏛️', label: 'Emendas Parlamentares' },
@@ -1335,9 +1333,7 @@ function renderPrestacaoContas() {
     return `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Nenhum convênio selecionado</div><div class="empty-state-text">Selecione um convênio no Painel Geral para acessar a Prestação de Contas.</div></div>`;
   }
   if (c.tipo === 'projeto') {
-    // Projetos não possuem Prestação de Contas; redireciona sem exibir nada
-    setTimeout(() => mudarView('painel'), 0);
-    return '';
+    return `<div class="empty-state"><div class="empty-state-icon">📋</div><div class="empty-state-title">Não se aplica a Projetos</div><div class="empty-state-text">"${escapeHtml(c.numero || 'Este projeto')}" está cadastrado como Projeto, e Projetos não têm prestação de contas neste sistema — só Convênios têm. Selecione um Convênio no Painel Geral para acessar esta tela.</div></div>`;
   }
 
   const resumo = calcularResumoFinanceiro(c.id);
