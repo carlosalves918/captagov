@@ -1023,6 +1023,7 @@ const TIPOS_DOC_IA = [
   { id: 'matrizRisco', nome: 'Matriz de Risco', desc: 'Identificação e alocação de riscos.' },
   { id: 'justificativaTecnica', nome: 'Justificativa Técnica', desc: 'Fundamentação da necessidade.' },
   { id: 'planoAcao', nome: 'Plano de Ação (SWOT + 5W2H)', desc: 'Análise de viabilidade e plano.' },
+  { id: 'planoTrabalho', nome: 'Plano de Trabalho', desc: 'Estrutura completa SICONV/TransfereGov: dados cadastrais, discriminação do projeto, cronograma, desembolso, classificação da despesa e plano de aplicação.' },
 ];
 
 // ==================== RELATÓRIOS ====================
