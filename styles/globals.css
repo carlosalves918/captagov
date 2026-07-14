@@ -867,6 +867,23 @@ tbody tr:last-child td {
   gap: 12px;
 }
 
+.convenio-card-valores {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--gray-500);
+  line-height: 1.4;
+  padding-right: 12px;
+  border-right: 1px solid var(--gray-200);
+  margin-right: 4px;
+}
+
+.convenio-card-valores strong {
+  color: var(--navy-900);
+}
+
 /* — Financeiro — */
 .fin-summary-grid {
   display: grid;
@@ -952,6 +969,16 @@ tbody tr:last-child td {
   .convenio-card {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .convenio-card-right {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .convenio-card-valores {
+    align-items: flex-start;
+    border-right: none;
+    padding-right: 0;
+    margin-right: 0;
   }
 }
 

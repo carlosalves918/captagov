@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { formatMoeda, statusConvenio } from '../public/js/utils.js';
+import { formatMoeda, parseMoeda, statusConvenio } from '../public/js/utils.js';
 
 export default function PainelGeral() {
   const { state, tick, novoConvenio, editarConvenio, abrirPrestacaoContas, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
@@ -102,6 +102,9 @@ export default function PainelGeral() {
             const res = calcularResumoFinanceiro(c.id);
             const saldo = res ? formatMoeda(res.saldoTotal) : formatMoeda(0);
             const saldoClass = res && res.saldoTotal < 0 ? 'negative' : 'positive';
+            const repasse = parseMoeda(c.valor || '0');
+            const contrapartida = parseMoeda(c.contrapartida || '0');
+            const totalConvenio = repasse + contrapartida;
             return (
               <div className="convenio-card" key={c.id}>
                 <div className="convenio-card-left">
@@ -114,7 +117,11 @@ export default function PainelGeral() {
                   <div className="convenio-card-sub">{c.conveniente || c.proponente || 'Convenente não informado'}</div>
                 </div>
                 <div className="convenio-card-right">
-                  <span className="font-mono" style={{ fontSize: 14 }}>R$ {c.valor || '0,00'}</span>
+                  <div className="convenio-card-valores">
+                    <span className="font-mono">Repasse: <strong>{formatMoeda(repasse)}</strong></span>
+                    <span className="font-mono">Contrapartida: <strong>{formatMoeda(contrapartida)}</strong></span>
+                    <span className="font-mono">Total: <strong>{formatMoeda(totalConvenio)}</strong></span>
+                  </div>
                   <span className="font-mono" style={{ fontSize: 14 }}>
                     Saldo: <strong className={saldoClass}>{saldo}</strong>
                   </span>
