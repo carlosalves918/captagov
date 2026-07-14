@@ -77,6 +77,24 @@ function salvarEstado() {
   persistirMeta();
 }
 
+// ==================== CÁLCULO FINANCEIRO ====================
+function calcularResumoFinanceiro(id) {
+  const c = STATE.convenios.find(x => x.id === id);
+  if (!c) return null;
+  if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
+  const f = c.financeiro;
+  const valor = parseMoeda(c.valor || '0');
+  const totalEntradas = (f.extratos || []).reduce((a, e) => a + (e.entradas || 0), 0);
+  const totalSaidas = (f.extratos || []).reduce((a, e) => a + (e.saidas || 0), 0);
+  const movExtrato = totalEntradas - totalSaidas;
+  const totalRendimento = (f.rendimentos || []).reduce((a, r) => a + (r.rendimento || 0), 0);
+  const totalUsoRendimento = (f.usos || []).reduce((a, u) => a + (u.valor || 0), 0);
+  const saldoRendimento = totalRendimento - totalUsoRendimento;
+  const totalPago = (f.pagamentos || []).reduce((a, p) => a + (p.valor || 0), 0);
+  const saldoTotal = valor + movExtrato + totalRendimento - totalUsoRendimento - totalPago;
+  return { valor, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, saldoTotal, fin: f };
+}
+
 async function carregarEstado() {
   const p = await carregarEstadoDb();
   STATE.convenios = p.convenios || [];
