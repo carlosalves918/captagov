@@ -1814,7 +1814,7 @@ function renderCadastro() {
           <input class="form-input" type="text" id="c_conta" />
         </div>
         <div class="form-group">
-          <label class="form-label">Valor Total (R$) <span class="required">*</span></label>
+          <label class="form-label">Repasse (R$) <span class="required">*</span></label>
           <input class="form-input" type="text" id="c_valor" oninput="mascararValor(this)" inputmode="numeric" />
         </div>
         ${ehConvenio ? `
