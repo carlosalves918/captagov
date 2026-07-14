@@ -268,17 +268,24 @@ function editarConvenio(id) {
   mudarView('cadastro');
   // Compatibilidade com registros antigos: "Federal" agora é "União"; dado antigo de proponente vira conveniente
   const esferaNormalizada = c.esfera === 'Federal' ? 'União' : (c.esfera === 'Estadual' ? 'Estado' : c.esfera);
-  setFormData({
-    c_numero: c.numero, c_programa: c.programa, c_orgao: c.orgao,
-    c_esfera: esferaNormalizada, c_natureza: c.natureza,
-    c_conveniente: c.conveniente || c.proponente,
-    c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
-    c_bairro: c.bairroProp, c_municipio: c.municipioProp,
-    c_telefone: c.telefoneInst, c_email: c.emailInst,
-    c_banco: c.banco, c_conta: c.conta, c_valor: c.valor,
-    c_contrapartida: c.contrapartida,
-    c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
-    c_data_fim: c.dataFim, c_prazo_pc: c.prazoPC || '60',
+  
+  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
+  // antes de tentar preencher os campos. Isso resolve o bug de formulário em branco
+  // que ocorria quando o React renderizava a tela mas setFormData() era chamado antes
+  // dos inputs existirem no DOM.
+  requestAnimationFrame(() => {
+    setFormData({
+      c_numero: c.numero, c_programa: c.programa, c_orgao: c.orgao,
+      c_esfera: esferaNormalizada, c_natureza: c.natureza,
+      c_conveniente: c.conveniente || c.proponente,
+      c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
+      c_bairro: c.bairroProp, c_municipio: c.municipioProp,
+      c_telefone: c.telefoneInst, c_email: c.emailInst,
+      c_banco: c.banco, c_conta: c.conta, c_valor: c.valor,
+      c_contrapartida: c.contrapartida,
+      c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
+      c_data_fim: c.dataFim, c_prazo_pc: c.prazoPC || '60',
+    });
   });
 }
 
@@ -576,12 +583,15 @@ function editarProponente(id) {
   STATE.view = 'proponentes';
   STATE.subView = 'form';
   renderTudo();
-  ['pp_razaoSocial', 'pp_natureza', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro',
-    'pp_municipio', 'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta',
-    'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
-  ].forEach(k => {
-    const el = document.getElementById(k);
-    if (el) el.value = p[k.replace('pp_', '')] || '';
+  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
+  requestAnimationFrame(() => {
+    ['pp_razaoSocial', 'pp_natureza', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro',
+      'pp_municipio', 'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta',
+      'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
+    ].forEach(k => {
+      const el = document.getElementById(k);
+      if (el) el.value = p[k.replace('pp_', '')] || '';
+    });
   });
 }
 
@@ -788,9 +798,12 @@ function editarResponsavelTecnico(id) {
   STATE.view = 'responsaveisTecnicos';
   STATE.subView = 'form';
   renderTudo();
-  ['rt_nome', 'rt_cargo', 'rt_conselho', 'rt_numeroRegistro', 'rt_cpf', 'rt_telefone', 'rt_email', 'rt_obs'].forEach(k => {
-    const el = document.getElementById(k);
-    if (el) el.value = r[k.replace('rt_', '')] || '';
+  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
+  requestAnimationFrame(() => {
+    ['rt_nome', 'rt_cargo', 'rt_conselho', 'rt_numeroRegistro', 'rt_cpf', 'rt_telefone', 'rt_email', 'rt_obs'].forEach(k => {
+      const el = document.getElementById(k);
+      if (el) el.value = r[k.replace('rt_', '')] || '';
+    });
   });
 }
 
@@ -864,9 +877,12 @@ function editarUsuario(id) {
   STATE.view = 'usuarios';
   STATE.subView = 'form';
   renderTudo();
-  ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs'].forEach(k => {
-    const el = document.getElementById(k);
-    if (el) el.value = u[k.replace('us_', '')] || '';
+  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
+  requestAnimationFrame(() => {
+    ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs'].forEach(k => {
+      const el = document.getElementById(k);
+      if (el) el.value = u[k.replace('us_', '')] || '';
+    });
   });
 }
 
