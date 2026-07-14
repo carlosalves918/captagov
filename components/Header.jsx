@@ -15,16 +15,43 @@ const NOMES_ABAS = {
   backups: 'Backups Automáticos',
 };
 
+// Mesmo agrupamento usado no Sidebar — o rótulo da seção acompanha
+// o breadcrumb do cabeçalho em todas as abas.
+const SECAO_DA_ABA = {
+  cadastro: 'Operacional',
+  prestacao: 'Operacional',
+  documentos: 'Operacional',
+  relatorios: 'Operacional',
+  emendas: 'Cadastros de Apoio',
+  instituicoes: 'Cadastros de Apoio',
+  proponentes: 'Cadastros de Apoio',
+  responsaveisTecnicos: 'Cadastros de Apoio',
+  usuarios: 'Administração',
+};
+
 export default function Header() {
-  const { state } = useApp();
+  const { state, mudarView } = useApp();
   if (!state) return null;
 
   const c = state.convenios?.find((x) => x.id === state.convenioAtualId);
+  const secao = SECAO_DA_ABA[state.view];
+  const naPainel = state.view === 'painel';
 
   return (
     <>
       <div className="main-header-left">
+        {!naPainel && (
+          <button
+            type="button"
+            className="btn-back"
+            onClick={() => mudarView('painel')}
+            aria-label="Voltar ao Painel Geral"
+          >
+            ← Voltar
+          </button>
+        )}
         <div>
+          {secao && <div className="main-header-eyebrow">{secao}</div>}
           <div className="main-header-title">{NOMES_ABAS[state.view] || state.view}</div>
           {c && (
             <div className="main-header-breadcrumb">

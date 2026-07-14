@@ -50,7 +50,7 @@
   --success-light: #DCFCE7;
 
   /* — Layout — */
-  --sidebar-width: 260px;
+  --sidebar-width: 300px;
   --header-height: 64px;
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -263,6 +263,36 @@ body {
   font-size: 21px;
   font-weight: 600;
   color: var(--navy-900);
+}
+
+.main-header-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--green-600);
+  margin-bottom: 2px;
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  color: var(--navy-900);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-back:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-300);
 }
 
 .main-header-breadcrumb {
@@ -893,10 +923,10 @@ tbody tr:last-child td {
 /* — Responsive — */
 @media (max-width: 1024px) {
   .sidebar {
-    width: 220px;
+    width: 250px;
   }
   .main-content {
-    margin-left: 220px;
+    margin-left: 250px;
   }
   .form-grid {
     grid-template-columns: 1fr;
