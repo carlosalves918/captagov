@@ -32,7 +32,10 @@ export default function PainelGeral() {
     : convenios;
 
   const totalGeralValor = lista.reduce(
-    (acc, c) => acc + parseMoeda(c.valor || '0') + parseMoeda(c.contrapartida || '0'),
+    (acc, c) => {
+      const res = calcularResumoFinanceiro(c.id);
+      return acc + (res ? res.valorTotal : 0);
+    },
     0,
   );
 
@@ -112,9 +115,9 @@ export default function PainelGeral() {
             const res = calcularResumoFinanceiro(c.id);
             const saldo = res ? formatMoeda(res.saldoTotal) : formatMoeda(0);
             const saldoClass = res && res.saldoTotal < 0 ? 'negative' : 'positive';
-            const repasse = parseMoeda(c.valor || '0');
-            const contrapartida = parseMoeda(c.contrapartida || '0');
-            const totalConvenio = repasse + contrapartida;
+            const repasse = res ? res.valor : 0;
+            const contrapartida = res ? res.contrapartida : 0;
+            const totalConvenio = res ? res.valorTotal : 0;
             return (
               <div className="convenio-card" key={c.id}>
                 <div className="convenio-card-left">

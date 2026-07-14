@@ -140,6 +140,8 @@ function calcularResumoFinanceiro(id) {
   if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
   const f = c.financeiro;
   const valor = parseMoeda(c.valor || '0');
+  const contrapartida = parseMoeda(c.contrapartida || '0');
+  const valorTotal = valor + contrapartida;
   const totalEntradas = (f.extratos || []).reduce((a, e) => a + (e.entradas || 0), 0);
   const totalSaidas = (f.extratos || []).reduce((a, e) => a + (e.saidas || 0), 0);
   const movExtrato = totalEntradas - totalSaidas;
@@ -147,8 +149,8 @@ function calcularResumoFinanceiro(id) {
   const totalUsoRendimento = (f.usos || []).reduce((a, u) => a + (u.valor || 0), 0);
   const saldoRendimento = totalRendimento - totalUsoRendimento;
   const totalPago = (f.pagamentos || []).reduce((a, p) => a + (p.valor || 0), 0);
-  const saldoTotal = valor + movExtrato + totalRendimento - totalUsoRendimento - totalPago;
-  return { valor, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, saldoTotal, fin: f };
+  const saldoTotal = valorTotal + movExtrato + totalRendimento - totalUsoRendimento - totalPago;
+  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, saldoTotal, fin: f };
 }
 
 async function carregarEstado() {
@@ -1699,7 +1701,11 @@ function renderPainel() {
             <div class="convenio-card-sub">${escapeHtml(c.conveniente || c.proponente || 'Convenente não informado')}</div>
           </div>
           <div class="convenio-card-right">
-            <span class="font-mono" style="font-size:14px;">R$ ${escapeHtml(c.valor || '0,00')}</span>
+            <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;margin-bottom:8px;">
+              <span class="font-mono">Repasse: <strong>${formatMoeda(res ? res.valor : 0)}</strong></span>
+              ${c.contrapartida ? `<span class="font-mono">Contrapartida: <strong>${formatMoeda(res ? res.contrapartida : 0)}</strong></span>` : ''}
+              <span class="font-mono">Total: <strong>${formatMoeda(res ? res.valorTotal : 0)}</strong></span>
+            </div>
             <span class="font-mono" style="font-size:14px;">Saldo: <strong class="${saldoClass}">${saldo}</strong></span>
             <span class="badge ${st.cls}">${st.label}</span>
             <button class="btn btn-ghost btn-sm" onclick="editarConvenio('${c.id}')">Abrir</button>
@@ -1894,9 +1900,19 @@ function renderPrestacaoContas() {
       <div class="card-title" style="margin-bottom:16px;">${escapeHtml(c.numero || 'sem número')} — ${escapeHtml(c.programa || '')}</div>
       <div class="fin-summary-grid">
         <div class="fin-summary-card">
-          <div class="fin-summary-label">Valor do Convênio</div>
+          <div class="fin-summary-label">Repasse</div>
           <div class="fin-summary-value neutral">${formatMoeda(resumo.valor)}</div>
         </div>
+        ${resumo.contrapartida > 0 ? `
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Contrapartida</div>
+          <div class="fin-summary-value neutral">${formatMoeda(resumo.contrapartida)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Valor Total</div>
+          <div class="fin-summary-value neutral"><strong>${formatMoeda(resumo.valorTotal)}</strong></div>
+        </div>
+        ` : ''}
         <div class="fin-summary-card">
           <div class="fin-summary-label">Movimento Extrato</div>
           <div class="fin-summary-value ${resumo.movExtrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.movExtrato)}</div>
@@ -2314,7 +2330,7 @@ function renderRelatorios() {
       <div class="card-title" style="font-size:16px;">Relatório Geral — Todos os Convênios</div>
       <div class="table-wrapper" style="margin-top:16px;">
         <table>
-          <thead><tr><th>Convênio</th><th>Programa</th><th>Convenente</th><th>Valor</th><th>Saldo</th><th>PC até</th></tr></thead>
+          <thead><tr><th>Convênio</th><th>Programa</th><th>Convenente</th><th>Repasse</th><th>Contrapartida</th><th>Total</th><th>Saldo</th><th>PC até</th></tr></thead>
           <tbody>
             ${STATE.convenios.map(cv => {
               const res = calcularResumoFinanceiro(cv.id);
@@ -2324,6 +2340,8 @@ function renderRelatorios() {
                 <td>${escapeHtml(cv.programa || '—')}</td>
                 <td>${escapeHtml(cv.conveniente || cv.proponente || '—')}</td>
                 <td class="font-mono">${formatMoeda(res ? res.valor : 0)}</td>
+                <td class="font-mono">${formatMoeda(res ? res.contrapartida : 0)}</td>
+                <td class="font-mono"><strong>${formatMoeda(res ? res.valorTotal : 0)}</strong></td>
                 <td class="font-mono ${saldoClass}">${formatMoeda(res ? res.saldoTotal : 0)}</td>
                 <td>${escapeHtml(cv.prazoLimitePC || '—')}</td>
               </tr>`;
@@ -2341,7 +2359,7 @@ function renderRelatorioFinanceiro(c) {
   return `
     <div class="card">
       <div class="card-title" style="font-size:18px;">${escapeHtml(c.numero || '?')} — ${escapeHtml(c.programa || '')}</div>
-      <div class="card-subtitle">Convenente: ${escapeHtml(c.conveniente || c.proponente || '?')} · Valor: ${formatMoeda(resumo.valor)}</div>
+      <div class="card-subtitle">Convenente: ${escapeHtml(c.conveniente || c.proponente || '?')} · Repasse: ${formatMoeda(resumo.valor)}${resumo.contrapartida > 0 ? ' · Contrapartida: ' + formatMoeda(resumo.contrapartida) + ' · Total: ' + formatMoeda(resumo.valorTotal) : ''}</div>
 
       <div class="fin-summary-grid">
         <div class="fin-summary-card"><div class="fin-summary-label">Movimento Extrato</div><div class="fin-summary-value ${resumo.movExtrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.movExtrato)}</div></div>
