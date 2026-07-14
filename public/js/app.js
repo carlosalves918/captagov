@@ -10,9 +10,10 @@ import {
   calcularPrazoPC, statusConvenio, validarCpfOuCnpj,
 } from './utils.js';
 import {
-  carregarEstadoDb, salvarConvenioDb, removerConvenioDb,
+  db, carregarEstadoDb, salvarConvenioDb, removerConvenioDb,
   salvarEmendaDb, removerEmendaDb, salvarMetaDb, limparConveniosEmendasDb,
   salvarInstituicaoDb, removerInstituicaoDb, salvarProponenteDb, removerProponenteDb,
+  criarSnapshotAutoDb, listarSnapshotsAutoDb, buscarSnapshotAutoDb, removerSnapshotAutoDb,
 } from './db.js';
 import { toastSucesso, toastErro, toastAviso } from './toast.js';
 import { gerarDocumentoAutomatico, gerarModeloEsqueleto, TIPOS_COM_AUTOPREENCHIMENTO } from './features/justificativa.js';
@@ -23,6 +24,7 @@ const STATE = {
   emendas: [],
   instituicoes: [],
   proponentes: [],
+  backupsAutoLista: [],
   convenioAtualId: null,
   convenioEditandoId: null,
   emendaEditandoId: null,
@@ -576,6 +578,125 @@ function excluirProponente(id) {
     limparFormProponente();
   }
   renderTudo();
+}
+
+// ==================== BACKUP AUTOMÁTICO ====================
+// Cria um snapshot interno (dentro do próprio IndexedDB) uma vez por dia de uso,
+// mantendo os últimos 7. Isso protege contra edição/exclusão acidental de dados,
+// mas NÃO protege contra o navegador limpar o cache/dados — por isso, a cada
+// semana também é disparado um lembrete pra exportar um backup externo (JSON).
+const INTERVALO_BACKUP_AUTO_MS = 24 * 60 * 60 * 1000; // 1 dia
+const INTERVALO_LEMBRETE_EXPORT_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
+
+async function verificarBackupAutomatico() {
+  try {
+    const agora = Date.now();
+    const registro = await db.meta.get('backupAuto');
+    const ultimoEm = registro?.ultimoEm ? new Date(registro.ultimoEm).getTime() : 0;
+    if (agora - ultimoEm >= INTERVALO_BACKUP_AUTO_MS) {
+      const payload = {
+        convenios: STATE.convenios,
+        emendas: STATE.emendas,
+        instituicoes: STATE.instituicoes,
+        proponentes: STATE.proponentes,
+        convenioAtualId: STATE.convenioAtualId,
+        protocoloSeq: STATE.protocoloSeq,
+      };
+      await criarSnapshotAutoDb(payload);
+      await db.meta.put({ chave: 'backupAuto', ultimoEm: new Date().toISOString() });
+    }
+
+    const registroExport = await db.meta.get('lembreteExport');
+    const ultimoLembreteEm = registroExport?.ultimoEm ? new Date(registroExport.ultimoEm).getTime() : 0;
+    if (agora - ultimoLembreteEm >= INTERVALO_LEMBRETE_EXPORT_MS) {
+      toastAviso('Já faz uma semana — considere exportar um backup (JSON) pra manter seus dados seguros fora do navegador.');
+      await db.meta.put({ chave: 'lembreteExport', ultimoEm: new Date().toISOString() });
+    }
+  } catch (e) {
+    console.error('Erro ao verificar/criar backup automático:', e);
+  }
+}
+
+async function abrirTelaBackups() {
+  try {
+    STATE.backupsAutoLista = await listarSnapshotsAutoDb();
+  } catch (e) {
+    console.error(e);
+    STATE.backupsAutoLista = [];
+  }
+  STATE.view = 'backups';
+  renderTudo();
+}
+
+async function restaurarSnapshotAuto(id) {
+  if (!confirm('Restaurar este backup automático? Isso substitui TODOS os dados atuais (convênios, emendas, instituições, proponentes) pelo conteúdo salvo nesse ponto no tempo.')) return;
+  try {
+    const snap = await buscarSnapshotAutoDb(id);
+    if (!snap) { toastErro('Backup não encontrado.'); return; }
+    const payload = snap.payload;
+    await limparConveniosEmendasDb();
+    STATE.convenios = payload.convenios || [];
+    STATE.emendas = payload.emendas || [];
+    STATE.instituicoes = payload.instituicoes || [];
+    STATE.proponentes = payload.proponentes || [];
+    STATE.convenioAtualId = payload.convenioAtualId || null;
+    STATE.protocoloSeq = payload.protocoloSeq || 0;
+    persistirTodosConvenios();
+    persistirTodasEmendas();
+    persistirTodasInstituicoes();
+    persistirTodosProponentes();
+    persistirMeta();
+    STATE.view = 'painel';
+    renderTudo();
+    toastSucesso('Backup restaurado com sucesso.');
+  } catch (e) {
+    console.error(e);
+    toastErro('Não consegui restaurar esse backup — veja o console para detalhes.');
+  }
+}
+
+async function excluirSnapshotAuto(id) {
+  if (!confirm('Excluir este backup automático da lista?')) return;
+  try {
+    await removerSnapshotAutoDb(id);
+    STATE.backupsAutoLista = await listarSnapshotsAutoDb();
+    renderTudo();
+  } catch (e) {
+    console.error(e);
+    toastErro('Não consegui remover esse backup.');
+  }
+}
+
+function formatarDataHoraSnapshot(iso) {
+  try {
+    return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  } catch { return iso; }
+}
+
+function renderBackups() {
+  return `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <div class="card-title" style="margin-bottom:0;">Backups Automáticos (${STATE.backupsAutoLista.length})</div>
+        <button class="btn btn-secondary btn-sm" onclick="mudarView('painel')">← Voltar ao Painel</button>
+      </div>
+      <div class="alert alert-info" style="margin-bottom:16px;">
+        Um backup interno é criado automaticamente 1x por dia de uso (mantemos os últimos 7). Isso protege contra edição ou exclusão
+        acidental, mas não substitui o <strong>Exportar Backup (JSON)</strong> — só ele tira os dados de dentro do navegador.
+      </div>
+      ${STATE.backupsAutoLista.length === 0
+      ? '<div class="empty-state"><div class="empty-state-icon">🕐</div><div class="empty-state-title">Nenhum backup automático ainda</div></div>'
+      : STATE.backupsAutoLista.map(s => `
+          <div class="convenio-card" style="margin-bottom:8px;">
+            <div class="convenio-card-title">${formatarDataHoraSnapshot(s.criadoEm)}</div>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <button class="btn btn-ghost btn-sm" onclick="restaurarSnapshotAuto('${s.id}')">↺ Restaurar</button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="excluirSnapshotAuto('${s.id}')">🗑</button>
+            </div>
+          </div>
+        `).join('')}
+    </div>
+  `;
 }
 
 // ==================== FINANCEIRO ====================
@@ -1264,10 +1385,11 @@ function renderSidebar() {
     <div class="sidebar-footer">
       <div style="margin-bottom:8px;">
         <button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:6px;" onclick="exportarDados()">⬇ Exportar Backup (JSON)</button>
-        <label class="btn btn-secondary btn-sm" style="width:100%;display:block;text-align:center;">
+        <label class="btn btn-secondary btn-sm" style="width:100%;display:block;text-align:center;margin-bottom:6px;">
           ⬆ Importar Backup
           <input type="file" accept=".json" style="display:none" onchange="importarDados(this.files[0])" />
         </label>
+        <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="abrirTelaBackups()">🕐 Backups Automáticos</button>
       </div>
       <div>CaptaGov v2.1 — Dados locais</div>
     </div>
@@ -1306,6 +1428,7 @@ function renderBody() {
     case 'emendas': el.innerHTML = renderEmendas(); break;
     case 'instituicoes': el.innerHTML = renderInstituicoes(); break;
     case 'proponentes': el.innerHTML = renderProponentes(); break;
+    case 'backups': el.innerHTML = renderBackups(); break;
     default: el.innerHTML = '<div class="empty-state"><div class="empty-state-title">Página em desenvolvimento</div></div>';
   }
 }
@@ -2667,7 +2790,7 @@ function gerarPDFRelatorio() {
 // template string com onclick="nomeDaFuncao(...)", então cada função
 // chamada dessa forma precisa ser atribuída a window explicitamente.
 Object.assign(window, {
-  abrirPrestacaoContas, adicionarContratada, adicionarDocExtra, anexarDocExtra,
+  abrirPrestacaoContas, abrirTelaBackups, adicionarContratada, adicionarDocExtra, anexarDocExtra,
   anexarDocPagamento, baixarDocumentoGerado, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
   editarEmenda, editarInstituicao, editarProponente, escapeHtml, excluirConvenio, excluirEmenda,
@@ -2678,7 +2801,8 @@ Object.assign(window, {
   mudarTipoEmenda, mudarView, novoConvenio, registrarPagamento,
   removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerExtrato, removerPagamento,
-  removerRendimento, renderTudo, salvarConvenio, salvarEmenda, salvarInstituicao, salvarProponente,
+  removerRendimento, renderTudo, restaurarSnapshotAuto, excluirSnapshotAuto,
+  salvarConvenio, salvarEmenda, salvarInstituicao, salvarProponente,
   toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
 });
@@ -2692,4 +2816,5 @@ Object.assign(window, {
     toastErro('Não consegui carregar os dados salvos localmente. Veja o console para detalhes.');
   }
   renderTudo();
+  verificarBackupAutomatico();
 })();

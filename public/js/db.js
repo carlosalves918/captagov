@@ -38,6 +38,14 @@ db.version(3).stores({
   instituicoes: 'id',
   proponentes: 'id',
 });
+db.version(4).stores({
+  convenios: 'id',
+  emendas: 'id',
+  meta: 'chave',
+  instituicoes: 'id',
+  proponentes: 'id',
+  backupsAuto: 'id, criadoEm',
+});
 
 let _saveTimersConvenio = new Map(); // debounce por-registro, não mais global
 let _saveTimerEmenda = new Map();
@@ -105,6 +113,33 @@ export function salvarProponenteDb(proponente) {
 
 export async function removerProponenteDb(id) {
   await db.proponentes.delete(id);
+}
+
+const MAX_SNAPSHOTS_AUTO = 7; // guarda os 7 últimos backups automáticos (~1 semana se for 1/dia)
+
+/** Cria um snapshot completo dos dados e apaga os mais antigos, mantendo só os últimos MAX_SNAPSHOTS_AUTO. */
+export async function criarSnapshotAutoDb(payload) {
+  const id = 'bkp_' + Date.now();
+  await db.backupsAuto.put({ id, criadoEm: new Date().toISOString(), payload });
+  const todos = await db.backupsAuto.orderBy('criadoEm').toArray();
+  if (todos.length > MAX_SNAPSHOTS_AUTO) {
+    const excedentes = todos.slice(0, todos.length - MAX_SNAPSHOTS_AUTO);
+    await db.backupsAuto.bulkDelete(excedentes.map(s => s.id));
+  }
+}
+
+/** Lista os snapshots automáticos disponíveis, do mais recente pro mais antigo (sem o payload, só metadados). */
+export async function listarSnapshotsAutoDb() {
+  const todos = await db.backupsAuto.orderBy('criadoEm').reverse().toArray();
+  return todos.map(s => ({ id: s.id, criadoEm: s.criadoEm }));
+}
+
+export async function buscarSnapshotAutoDb(id) {
+  return db.backupsAuto.get(id);
+}
+
+export async function removerSnapshotAutoDb(id) {
+  await db.backupsAuto.delete(id);
 }
 
 /** Usado só na importação de backup (substituir tudo) — limpa as tabelas antes de gravar o conteúdo novo. */
