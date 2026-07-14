@@ -12,6 +12,7 @@ import {
 import {
   carregarEstadoDb, salvarConvenioDb, removerConvenioDb,
   salvarEmendaDb, removerEmendaDb, salvarMetaDb, limparConveniosEmendasDb,
+  salvarInstituicaoDb, removerInstituicaoDb, salvarProponenteDb, removerProponenteDb,
 } from './db.js';
 import { toastSucesso, toastErro, toastAviso } from './toast.js';
 import { gerarDocumentoAutomatico, gerarModeloEsqueleto, TIPOS_COM_AUTOPREENCHIMENTO } from './features/justificativa.js';
@@ -20,9 +21,13 @@ import { gerarDocumentoAutomatico, gerarModeloEsqueleto, TIPOS_COM_AUTOPREENCHIM
 const STATE = {
   convenios: [],
   emendas: [],
+  instituicoes: [],
+  proponentes: [],
   convenioAtualId: null,
   convenioEditandoId: null,
   emendaEditandoId: null,
+  instituicaoEditandoId: null,
+  proponenteEditandoId: null,
   contratadaEditandoId: null,
   protocoloSeq: 0,
   view: 'painel',
@@ -63,6 +68,24 @@ function persistirTodasEmendas() {
   STATE.emendas.forEach(e => salvarEmendaDb(e));
 }
 
+function persistirInstituicao(id) {
+  const i = STATE.instituicoes.find(x => x.id === id);
+  if (i) salvarInstituicaoDb(i);
+}
+
+function persistirTodasInstituicoes() {
+  STATE.instituicoes.forEach(i => salvarInstituicaoDb(i));
+}
+
+function persistirProponente(id) {
+  const p = STATE.proponentes.find(x => x.id === id);
+  if (p) salvarProponenteDb(p);
+}
+
+function persistirTodosProponentes() {
+  STATE.proponentes.forEach(p => salvarProponenteDb(p));
+}
+
 function persistirMeta() {
   salvarMetaDb({ convenioAtualId: STATE.convenioAtualId, protocoloSeq: STATE.protocoloSeq });
 }
@@ -74,6 +97,8 @@ function salvarEstado() {
   if (STATE.convenioAtualId) persistirConvenio(STATE.convenioAtualId);
   if (STATE.convenioEditandoId && STATE.convenioEditandoId !== STATE.convenioAtualId) persistirConvenio(STATE.convenioEditandoId);
   if (STATE.emendaEditandoId) persistirEmenda(STATE.emendaEditandoId);
+  if (STATE.instituicaoEditandoId) persistirInstituicao(STATE.instituicaoEditandoId);
+  if (STATE.proponenteEditandoId) persistirProponente(STATE.proponenteEditandoId);
   persistirMeta();
 }
 
@@ -99,6 +124,8 @@ async function carregarEstado() {
   const p = await carregarEstadoDb();
   STATE.convenios = p.convenios || [];
   STATE.emendas = p.emendas || [];
+  STATE.instituicoes = p.instituicoes || [];
+  STATE.proponentes = p.proponentes || [];
   STATE.convenioAtualId = p.convenioAtualId || null;
   STATE.protocoloSeq = p.protocoloSeq || 0;
   STATE.convenios.forEach(c => {
@@ -112,6 +139,8 @@ function mudarView(view) {
   if (view === 'prestacao') STATE.subView = 'contratadas';
   else if (view === 'documentos') STATE.docSubView = 'ia';
   else if (view === 'emendas') STATE.subView = 'lista';
+  else if (view === 'instituicoes') STATE.subView = 'lista';
+  else if (view === 'proponentes') STATE.subView = 'lista';
   else if (view === 'relatorios') STATE.subView = 'contratadas';
   if (view !== 'cadastro') STATE.cadastroMensagem = null;
   if (view !== 'documentos') { STATE.docGeradoTipo = null; STATE.docGeradoTexto = null; }
@@ -376,6 +405,177 @@ function excluirEmenda(id) {
     limparFormEmenda();
   }
   salvarEstado();
+}
+
+// ==================== CRUD INSTITUIÇÕES ====================
+function novaInstituicao() {
+  STATE.instituicaoEditandoId = null;
+  limparFormInstituicao();
+  mudarSubView('form');
+}
+
+function editarInstituicao(id) {
+  const i = STATE.instituicoes.find(x => x.id === id);
+  if (!i) return;
+  STATE.instituicaoEditandoId = id;
+  STATE.view = 'instituicoes';
+  STATE.subView = 'form';
+  renderTudo();
+  ['in_razaoSocial', 'in_nomeFantasia', 'in_cnpj', 'in_esfera', 'in_cep', 'in_logradouro',
+    'in_bairro', 'in_municipio', 'in_telefone', 'in_email', 'in_repNome', 'in_repCargo', 'in_repCpf', 'in_obs',
+  ].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = i[k.replace('in_', '')] || '';
+  });
+}
+
+function salvarInstituicao() {
+  const nota = document.getElementById('instituicaoNote');
+  const razaoSocial = (document.getElementById('in_razaoSocial')?.value || '').trim();
+  const cnpj = (document.getElementById('in_cnpj')?.value || '').trim();
+
+  if (!razaoSocial) {
+    nota.innerHTML = '<div class="alert alert-warning">Informe a Razão Social.</div>';
+    return;
+  }
+  const docCheck = validarCpfOuCnpj(cnpj);
+  if (cnpj && !docCheck.valido) {
+    nota.innerHTML = '<div class="alert alert-danger">CNPJ parece inválido. Confira os dígitos.</div>';
+    return;
+  }
+
+  const dados = {
+    razaoSocial,
+    nomeFantasia: document.getElementById('in_nomeFantasia')?.value || '',
+    cnpj,
+    esfera: document.getElementById('in_esfera')?.value || 'Municipal',
+    cep: document.getElementById('in_cep')?.value || '',
+    logradouro: document.getElementById('in_logradouro')?.value || '',
+    bairro: document.getElementById('in_bairro')?.value || '',
+    municipio: document.getElementById('in_municipio')?.value || '',
+    telefone: document.getElementById('in_telefone')?.value || '',
+    email: document.getElementById('in_email')?.value || '',
+    repNome: document.getElementById('in_repNome')?.value || '',
+    repCargo: document.getElementById('in_repCargo')?.value || '',
+    repCpf: document.getElementById('in_repCpf')?.value || '',
+    obs: document.getElementById('in_obs')?.value || '',
+  };
+
+  let idPersistir;
+  if (STATE.instituicaoEditandoId) {
+    const idx = STATE.instituicoes.findIndex(i => i.id === STATE.instituicaoEditandoId);
+    if (idx > -1) STATE.instituicoes[idx] = { id: STATE.instituicaoEditandoId, ...dados };
+    idPersistir = STATE.instituicaoEditandoId;
+  } else {
+    idPersistir = gerarId('in');
+    STATE.instituicoes.push({ id: idPersistir, ...dados });
+  }
+
+  persistirInstituicao(idPersistir);
+  STATE.instituicaoEditandoId = null;
+  limparFormInstituicao();
+  mudarSubView('lista');
+  toastSucesso('Instituição salva.');
+}
+
+function excluirInstituicao(id) {
+  const i = STATE.instituicoes.find(x => x.id === id);
+  if (!i) return;
+  if (!confirm('Excluir a instituição "' + (i.razaoSocial || '?') + '"?')) return;
+  STATE.instituicoes = STATE.instituicoes.filter(x => x.id !== id);
+  removerInstituicaoDb(id).catch(err => { console.error(err); toastErro('Não consegui remover do banco local — tente novamente.'); });
+  if (STATE.instituicaoEditandoId === id) {
+    STATE.instituicaoEditandoId = null;
+    limparFormInstituicao();
+  }
+  renderTudo();
+}
+
+// ==================== CRUD PROPONENTES/CONVENENTES ====================
+function novaProponente() {
+  STATE.proponenteEditandoId = null;
+  limparFormProponente();
+  mudarSubView('form');
+}
+
+function editarProponente(id) {
+  const p = STATE.proponentes.find(x => x.id === id);
+  if (!p) return;
+  STATE.proponenteEditandoId = id;
+  STATE.view = 'proponentes';
+  STATE.subView = 'form';
+  renderTudo();
+  ['pp_razaoSocial', 'pp_natureza', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro',
+    'pp_municipio', 'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta',
+    'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
+  ].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = p[k.replace('pp_', '')] || '';
+  });
+}
+
+function salvarProponente() {
+  const nota = document.getElementById('proponenteNote');
+  const razaoSocial = (document.getElementById('pp_razaoSocial')?.value || '').trim();
+  const documento = (document.getElementById('pp_documento')?.value || '').trim();
+
+  if (!razaoSocial) {
+    nota.innerHTML = '<div class="alert alert-warning">Informe o Nome/Razão Social do proponente.</div>';
+    return;
+  }
+  const docCheck = validarCpfOuCnpj(documento);
+  if (documento && !docCheck.valido) {
+    nota.innerHTML = '<div class="alert alert-danger">CPF/CNPJ parece inválido. Confira os dígitos.</div>';
+    return;
+  }
+
+  const dados = {
+    razaoSocial,
+    natureza: document.getElementById('pp_natureza')?.value || 'OSC',
+    documento,
+    cep: document.getElementById('pp_cep')?.value || '',
+    logradouro: document.getElementById('pp_logradouro')?.value || '',
+    bairro: document.getElementById('pp_bairro')?.value || '',
+    municipio: document.getElementById('pp_municipio')?.value || '',
+    telefone: document.getElementById('pp_telefone')?.value || '',
+    email: document.getElementById('pp_email')?.value || '',
+    banco: document.getElementById('pp_banco')?.value || '',
+    agencia: document.getElementById('pp_agencia')?.value || '',
+    conta: document.getElementById('pp_conta')?.value || '',
+    repNome: document.getElementById('pp_repNome')?.value || '',
+    repCargo: document.getElementById('pp_repCargo')?.value || '',
+    repCpf: document.getElementById('pp_repCpf')?.value || '',
+    obs: document.getElementById('pp_obs')?.value || '',
+  };
+
+  let idPersistir;
+  if (STATE.proponenteEditandoId) {
+    const idx = STATE.proponentes.findIndex(p => p.id === STATE.proponenteEditandoId);
+    if (idx > -1) STATE.proponentes[idx] = { id: STATE.proponenteEditandoId, ...dados };
+    idPersistir = STATE.proponenteEditandoId;
+  } else {
+    idPersistir = gerarId('pp');
+    STATE.proponentes.push({ id: idPersistir, ...dados });
+  }
+
+  persistirProponente(idPersistir);
+  STATE.proponenteEditandoId = null;
+  limparFormProponente();
+  mudarSubView('lista');
+  toastSucesso('Proponente/Convenente salvo.');
+}
+
+function excluirProponente(id) {
+  const p = STATE.proponentes.find(x => x.id === id);
+  if (!p) return;
+  if (!confirm('Excluir o proponente "' + (p.razaoSocial || '?') + '"?')) return;
+  STATE.proponentes = STATE.proponentes.filter(x => x.id !== id);
+  removerProponenteDb(id).catch(err => { console.error(err); toastErro('Não consegui remover do banco local — tente novamente.'); });
+  if (STATE.proponenteEditandoId === id) {
+    STATE.proponenteEditandoId = null;
+    limparFormProponente();
+  }
+  renderTudo();
 }
 
 // ==================== FINANCEIRO ====================
@@ -862,6 +1062,8 @@ function exportarDados() {
     convenioAtualId: STATE.convenioAtualId,
     protocoloSeq: STATE.protocoloSeq,
     emendas: STATE.emendas,
+    instituicoes: STATE.instituicoes,
+    proponentes: STATE.proponentes,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -979,6 +1181,8 @@ function importarDados(file) {
     STATE.convenioAtualId = payload.convenioAtualId || null;
     STATE.protocoloSeq = payload.protocoloSeq || 0;
     STATE.emendas = payload.emendas || [];
+    STATE.instituicoes = payload.instituicoes || [];
+    STATE.proponentes = payload.proponentes || [];
     STATE.convenios.forEach(c => {
       if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
       if (!c.documentosExtras) c.documentosExtras = [];
@@ -989,6 +1193,8 @@ function importarDados(file) {
       await limparConveniosEmendasDb(); // "substituir tudo" precisa limpar o que tinha antes, senão fica lixo órfão no IndexedDB
       persistirTodosConvenios();
       persistirTodasEmendas();
+      persistirTodasInstituicoes();
+      persistirTodosProponentes();
       persistirMeta();
       renderTudo();
       toastSucesso('Backup importado com sucesso.');
@@ -1036,6 +1242,8 @@ function renderSidebar() {
     { id: 'documentos', icon: '📁', label: 'Gestão de Documentos' },
     { id: 'relatorios', icon: '📈', label: 'Relatórios' },
     { id: 'emendas', icon: '🏛️', label: 'Emendas Parlamentares' },
+    { id: 'instituicoes', icon: '🏢', label: 'Instituições' },
+    { id: 'proponentes', icon: '🤝', label: 'Proponentes/Convenentes' },
   ];
   el.innerHTML = `
     <div class="sidebar-header">
@@ -1071,6 +1279,7 @@ function renderHeader() {
   const nomesAbas = {
     painel: 'Painel Geral', cadastro: 'Cadastro', prestacao: 'Prestação de Contas',
     documentos: 'Gestão de Documentos', relatorios: 'Relatórios', emendas: 'Emendas Parlamentares',
+    instituicoes: 'Instituições', proponentes: 'Proponentes/Convenentes',
   };
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   el.innerHTML = `
@@ -1094,6 +1303,8 @@ function renderBody() {
     case 'documentos': el.innerHTML = renderGestaoDocumentos(); break;
     case 'relatorios': el.innerHTML = renderRelatorios(); break;
     case 'emendas': el.innerHTML = renderEmendas(); break;
+    case 'instituicoes': el.innerHTML = renderInstituicoes(); break;
+    case 'proponentes': el.innerHTML = renderProponentes(); break;
     default: el.innerHTML = '<div class="empty-state"><div class="empty-state-title">Página em desenvolvimento</div></div>';
   }
 }
@@ -1941,6 +2152,202 @@ function renderEmendaForm() {
   `;
 }
 
+function renderInstituicoes() {
+  const subTabs = [
+    { id: 'lista', label: 'Lista de Instituições' },
+    { id: 'form', label: STATE.instituicaoEditandoId ? 'Editar Instituição' : 'Nova Instituição' },
+  ];
+  return `
+    <div class="subtabs">
+      ${subTabs.map(t => `<button class="subtab ${STATE.subView === t.id ? 'active' : ''}" onclick="mudarSubView('${t.id}')">${t.label}</button>`).join('')}
+    </div>
+    <div class="card">
+      ${STATE.subView === 'lista' ? renderInstituicaoLista() : renderInstituicaoForm()}
+    </div>
+  `;
+}
+
+function renderInstituicaoLista() {
+  const busca = document.getElementById('instituicaoBusca');
+  const termo = busca ? busca.value.trim().toLowerCase() : '';
+  const lista = termo
+    ? STATE.instituicoes.filter(i => (i.razaoSocial || '').toLowerCase().includes(termo) || (i.cnpj || '').includes(termo))
+    : STATE.instituicoes;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:0;">Instituições (${STATE.instituicoes.length})</div>
+      <div style="display:flex;gap:12px;">
+        <div class="search-input">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Buscar instituição..." value="${escapeHtml(termo)}" id="instituicaoBusca" oninput="renderTudo()" />
+        </div>
+        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Nova Instituição</button>
+      </div>
+    </div>
+    ${lista.length === 0
+    ? '<div class="empty-state"><div class="empty-state-icon">🏢</div><div class="empty-state-title">Nenhuma instituição cadastrada</div></div>'
+    : lista.slice().reverse().map(i => `
+        <div class="convenio-card" style="margin-bottom:8px;">
+          <div>
+            <div class="convenio-card-title">${escapeHtml(i.razaoSocial || '?')}${i.nomeFantasia ? ' <span style="color:var(--gray-400);font-weight:400;">— ' + escapeHtml(i.nomeFantasia) + '</span>' : ''}</div>
+            <div class="convenio-card-sub">${i.cnpj ? 'CNPJ ' + escapeHtml(i.cnpj) : 'CNPJ não informado'}${i.municipio ? ' · ' + escapeHtml(i.municipio) : ''}${i.repNome ? ' · Repres.: ' + escapeHtml(i.repNome) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="badge badge-info">${escapeHtml(i.esfera || 'Municipal')}</span>
+            <button class="btn btn-ghost btn-sm" onclick="editarInstituicao('${i.id}')">Editar</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="excluirInstituicao('${i.id}')">🗑</button>
+          </div>
+        </div>
+      `).join('')}
+  `;
+}
+
+function renderInstituicaoForm() {
+  return `
+    <div class="card-title" style="font-size:16px;">${STATE.instituicaoEditandoId ? 'Editar' : 'Nova'} Instituição</div>
+    <div id="instituicaoNote"></div>
+    <div class="form-grid" style="margin-top:16px;">
+      <div class="form-group full-width"><label class="form-label">Razão Social <span class="required">*</span></label><input class="form-input" id="in_razaoSocial" placeholder="Ex: Prefeitura Municipal de..." /></div>
+      <div class="form-group"><label class="form-label">Nome Fantasia</label><input class="form-input" id="in_nomeFantasia" /></div>
+      <div class="form-group"><label class="form-label">CNPJ</label><input class="form-input" id="in_cnpj" maxlength="18" oninput="mascararCNPJ(this)" placeholder="00.000.000/0000-00" /></div>
+      <div class="form-group">
+        <label class="form-label">Esfera</label>
+        <select class="form-input form-select" id="in_esfera">
+          <option>Municipal</option><option>Estadual</option><option>Federal</option><option>OSC / Privada</option>
+        </select>
+      </div>
+
+      <div class="form-section-title">📍 Endereço</div>
+      <div class="form-group"><label class="form-label">CEP</label><input class="form-input" id="in_cep" maxlength="9" oninput="mascararCEP(this)" placeholder="00000-000" /></div>
+      <div class="form-group"><label class="form-label">Logradouro</label><input class="form-input" id="in_logradouro" /></div>
+      <div class="form-group"><label class="form-label">Bairro</label><input class="form-input" id="in_bairro" /></div>
+      <div class="form-group"><label class="form-label">Município</label><input class="form-input" id="in_municipio" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="in_telefone" /></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="in_email" type="email" /></div>
+
+      <div class="form-section-title">👤 Representante Legal</div>
+      <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="in_repNome" placeholder="Ex: Prefeito(a) Municipal" /></div>
+      <div class="form-group"><label class="form-label">Cargo</label><input class="form-input" id="in_repCargo" /></div>
+      <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="in_repCpf" maxlength="14" oninput="mascararCPF(this)" placeholder="000.000.000-00" /></div>
+
+      <div class="form-group full-width"><label class="form-label">Observações</label><input class="form-input" id="in_obs" /></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px;">
+      <button class="btn btn-primary btn-lg" onclick="salvarInstituicao()">💾 Salvar Instituição</button>
+      <button class="btn btn-secondary btn-lg" onclick="mudarSubView('lista')">Cancelar</button>
+    </div>
+  `;
+}
+
+function limparFormInstituicao() {
+  ['in_razaoSocial', 'in_nomeFantasia', 'in_cnpj', 'in_cep', 'in_logradouro', 'in_bairro',
+    'in_municipio', 'in_telefone', 'in_email', 'in_repNome', 'in_repCargo', 'in_repCpf', 'in_obs',
+  ].forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
+  const nota = document.getElementById('instituicaoNote');
+  if (nota) nota.innerHTML = '';
+}
+
+function renderProponentes() {
+  const subTabs = [
+    { id: 'lista', label: 'Lista de Proponentes' },
+    { id: 'form', label: STATE.proponenteEditandoId ? 'Editar Proponente' : 'Novo Proponente' },
+  ];
+  return `
+    <div class="subtabs">
+      ${subTabs.map(t => `<button class="subtab ${STATE.subView === t.id ? 'active' : ''}" onclick="mudarSubView('${t.id}')">${t.label}</button>`).join('')}
+    </div>
+    <div class="card">
+      ${STATE.subView === 'lista' ? renderProponenteLista() : renderProponenteForm()}
+    </div>
+  `;
+}
+
+function renderProponenteLista() {
+  const busca = document.getElementById('proponenteBusca');
+  const termo = busca ? busca.value.trim().toLowerCase() : '';
+  const lista = termo
+    ? STATE.proponentes.filter(p => (p.razaoSocial || '').toLowerCase().includes(termo) || (p.documento || '').includes(termo))
+    : STATE.proponentes;
+
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="card-title" style="margin-bottom:0;">Proponentes / Convenentes (${STATE.proponentes.length})</div>
+      <div style="display:flex;gap:12px;">
+        <div class="search-input">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Buscar proponente..." value="${escapeHtml(termo)}" id="proponenteBusca" oninput="renderTudo()" />
+        </div>
+        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Novo Proponente</button>
+      </div>
+    </div>
+    ${lista.length === 0
+    ? '<div class="empty-state"><div class="empty-state-icon">🤝</div><div class="empty-state-title">Nenhum proponente cadastrado</div></div>'
+    : lista.slice().reverse().map(p => `
+        <div class="convenio-card" style="margin-bottom:8px;">
+          <div>
+            <div class="convenio-card-title">${escapeHtml(p.razaoSocial || '?')}</div>
+            <div class="convenio-card-sub">${p.documento ? escapeHtml(p.documento) : 'CPF/CNPJ não informado'}${p.municipio ? ' · ' + escapeHtml(p.municipio) : ''}${p.repNome ? ' · Repres.: ' + escapeHtml(p.repNome) : ''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="badge badge-info">${escapeHtml(p.natureza || 'OSC')}</span>
+            <button class="btn btn-ghost btn-sm" onclick="editarProponente('${p.id}')">Editar</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="excluirProponente('${p.id}')">🗑</button>
+          </div>
+        </div>
+      `).join('')}
+  `;
+}
+
+function renderProponenteForm() {
+  return `
+    <div class="card-title" style="font-size:16px;">${STATE.proponenteEditandoId ? 'Editar' : 'Novo'} Proponente / Convenente</div>
+    <div id="proponenteNote"></div>
+    <div class="form-grid" style="margin-top:16px;">
+      <div class="form-group full-width"><label class="form-label">Nome / Razão Social <span class="required">*</span></label><input class="form-input" id="pp_razaoSocial" placeholder="Ex: OSC, consórcio, empresa ou pessoa física" /></div>
+      <div class="form-group">
+        <label class="form-label">Natureza</label>
+        <select class="form-input form-select" id="pp_natureza">
+          <option>OSC</option><option>Consórcio Público</option><option>Empresa Privada</option><option>Pessoa Física</option><option>Prefeitura</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">CPF/CNPJ</label><input class="form-input" id="pp_documento" maxlength="18" oninput="mascararCNPJ(this)" placeholder="CPF ou CNPJ" /></div>
+
+      <div class="form-section-title">📍 Endereço</div>
+      <div class="form-group"><label class="form-label">CEP</label><input class="form-input" id="pp_cep" maxlength="9" oninput="mascararCEP(this)" placeholder="00000-000" /></div>
+      <div class="form-group"><label class="form-label">Logradouro</label><input class="form-input" id="pp_logradouro" /></div>
+      <div class="form-group"><label class="form-label">Bairro</label><input class="form-input" id="pp_bairro" /></div>
+      <div class="form-group"><label class="form-label">Município</label><input class="form-input" id="pp_municipio" /></div>
+      <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="pp_telefone" /></div>
+      <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="pp_email" type="email" /></div>
+
+      <div class="form-section-title">🏦 Dados Bancários</div>
+      <div class="form-group"><label class="form-label">Banco</label><input class="form-input" id="pp_banco" /></div>
+      <div class="form-group"><label class="form-label">Agência</label><input class="form-input" id="pp_agencia" /></div>
+      <div class="form-group"><label class="form-label">Conta</label><input class="form-input" id="pp_conta" /></div>
+
+      <div class="form-section-title">👤 Representante Legal</div>
+      <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pp_repNome" /></div>
+      <div class="form-group"><label class="form-label">Cargo</label><input class="form-input" id="pp_repCargo" /></div>
+      <div class="form-group"><label class="form-label">CPF</label><input class="form-input" id="pp_repCpf" maxlength="14" oninput="mascararCPF(this)" placeholder="000.000.000-00" /></div>
+
+      <div class="form-group full-width"><label class="form-label">Observações</label><input class="form-input" id="pp_obs" /></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:12px;">
+      <button class="btn btn-primary btn-lg" onclick="salvarProponente()">💾 Salvar Proponente</button>
+      <button class="btn btn-secondary btn-lg" onclick="mudarSubView('lista')">Cancelar</button>
+    </div>
+  `;
+}
+
+function limparFormProponente() {
+  ['pp_razaoSocial', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro', 'pp_municipio',
+    'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta', 'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
+  ].forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
+  const nota = document.getElementById('proponenteNote');
+  if (nota) nota.innerHTML = '';
+}
+
 function limparFormEmenda() {
   ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
     const el = document.getElementById(k);
@@ -2262,14 +2669,15 @@ Object.assign(window, {
   abrirPrestacaoContas, adicionarContratada, adicionarDocExtra, anexarDocExtra,
   anexarDocPagamento, baixarDocumentoGerado, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
-  editarEmenda, escapeHtml, excluirConvenio, excluirEmenda, exportarAnexosZIP,
+  editarEmenda, editarInstituicao, editarProponente, escapeHtml, excluirConvenio, excluirEmenda,
+  excluirInstituicao, excluirProponente, exportarAnexosZIP,
   exportarCSVFinanceiro, exportarDados, fecharDocumentoGerado, gerarDocumento,
   gerarPDFRelatorio, importarDados, lancarExtrato, lancarRendimento,
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
   mudarTipoEmenda, mudarView, novoConvenio, registrarPagamento,
   removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerExtrato, removerPagamento,
-  removerRendimento, renderTudo, salvarConvenio, salvarEmenda,
+  removerRendimento, renderTudo, salvarConvenio, salvarEmenda, salvarInstituicao, salvarProponente,
   toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
 });

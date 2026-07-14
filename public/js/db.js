@@ -25,6 +25,19 @@ db.version(1).stores({
   emendas: 'id',
   meta: 'chave', // protocoloSeq, convenioAtualId, etc. — pares chave/valor simples
 });
+db.version(2).stores({
+  convenios: 'id',
+  emendas: 'id',
+  meta: 'chave',
+  instituicoes: 'id',
+});
+db.version(3).stores({
+  convenios: 'id',
+  emendas: 'id',
+  meta: 'chave',
+  instituicoes: 'id',
+  proponentes: 'id',
+});
 
 let _saveTimersConvenio = new Map(); // debounce por-registro, não mais global
 let _saveTimerEmenda = new Map();
@@ -60,11 +73,47 @@ export async function removerEmendaDb(id) {
   await db.emendas.delete(id);
 }
 
+let _saveTimersInstituicao = new Map();
+
+export function salvarInstituicaoDb(instituicao) {
+  if (!instituicao || !instituicao.id) return;
+  const timers = _saveTimersInstituicao;
+  if (timers.has(instituicao.id)) clearTimeout(timers.get(instituicao.id));
+  const t = setTimeout(() => {
+    db.instituicoes.put(instituicao).catch(e => console.error('Erro ao salvar instituição no IndexedDB:', e));
+    timers.delete(instituicao.id);
+  }, 300);
+  timers.set(instituicao.id, t);
+}
+
+export async function removerInstituicaoDb(id) {
+  await db.instituicoes.delete(id);
+}
+
+let _saveTimersProponente = new Map();
+
+export function salvarProponenteDb(proponente) {
+  if (!proponente || !proponente.id) return;
+  const timers = _saveTimersProponente;
+  if (timers.has(proponente.id)) clearTimeout(timers.get(proponente.id));
+  const t = setTimeout(() => {
+    db.proponentes.put(proponente).catch(e => console.error('Erro ao salvar proponente no IndexedDB:', e));
+    timers.delete(proponente.id);
+  }, 300);
+  timers.set(proponente.id, t);
+}
+
+export async function removerProponenteDb(id) {
+  await db.proponentes.delete(id);
+}
+
 /** Usado só na importação de backup (substituir tudo) — limpa as tabelas antes de gravar o conteúdo novo. */
 export async function limparConveniosEmendasDb() {
-  await db.transaction('rw', db.convenios, db.emendas, async () => {
+  await db.transaction('rw', db.convenios, db.emendas, db.instituicoes, db.proponentes, async () => {
     await db.convenios.clear();
     await db.emendas.clear();
+    await db.instituicoes.clear();
+    await db.proponentes.clear();
   });
 }
 
@@ -78,14 +127,18 @@ export function salvarMetaDb(meta) {
 /** Carrega tudo do banco pras estruturas em memória. Retorna { convenios, emendas, meta }. */
 export async function carregarEstadoDb() {
   await migrarParaTabelas();
-  const [convenios, emendas, metaRow] = await Promise.all([
+  const [convenios, emendas, instituicoes, proponentes, metaRow] = await Promise.all([
     db.convenios.toArray(),
     db.emendas.toArray(),
+    db.instituicoes.toArray(),
+    db.proponentes.toArray(),
     db.meta.get('geral'),
   ]);
   return {
     convenios,
     emendas,
+    instituicoes,
+    proponentes,
     convenioAtualId: metaRow?.convenioAtualId || null,
     protocoloSeq: metaRow?.protocoloSeq || 0,
   };
