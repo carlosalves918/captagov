@@ -208,7 +208,7 @@ function preencherComProponente(id) {
   const mapa = {
     c_conveniente: p.razaoSocial, c_cnpj: p.documento, c_cep: p.cep, c_logradouro: p.logradouro,
     c_bairro: p.bairro, c_municipio: p.municipio, c_telefone: p.telefone, c_email: p.email,
-    c_banco: p.banco, c_conta: p.conta,
+    c_banco: p.banco, c_agencia: p.agencia, c_conta: p.conta,
   };
   Object.entries(mapa).forEach(([campo, valor]) => {
     const el = document.getElementById(campo);
@@ -223,7 +223,7 @@ function preencherComProponente(id) {
 const camposConvenio = [
   'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
   'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_telefone', 'c_email',
-  'c_banco', 'c_conta', 'c_valor', 'c_contrapartida',
+  'c_banco', 'c_agencia', 'c_conta', 'c_valor', 'c_contrapartida',
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
 
@@ -284,7 +284,7 @@ function editarConvenio(id) {
       c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
       c_bairro: c.bairroProp, c_municipio: c.municipioProp,
       c_telefone: c.telefoneInst, c_email: c.emailInst,
-      c_banco: c.banco, c_conta: c.conta, c_valor: c.valor,
+      c_banco: c.banco, c_agencia: c.agencia, c_conta: c.conta, c_valor: c.valor,
       c_contrapartida: c.contrapartida,
       c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
       c_data_fim: c.dataFim, c_prazo_pc: c.prazoPC || '60',
@@ -328,7 +328,7 @@ function salvarConvenio() {
     cnpj: form.c_cnpj, cep: form.c_cep, logradouro: form.c_logradouro,
     bairroProp: form.c_bairro, municipioProp: form.c_municipio,
     telefoneInst: form.c_telefone, emailInst: form.c_email,
-    banco: form.c_banco, conta: form.c_conta,
+    banco: form.c_banco, agencia: form.c_agencia, conta: form.c_conta,
     valor: form.c_valor, contrapartida: form.c_contrapartida,
     dataAssinatura: form.c_data_assinatura, dataInicio, dataFim,
     prazoPC: form.c_prazo_pc, prazoLimitePC,
@@ -1857,6 +1857,10 @@ function renderCadastro() {
           <input class="form-input" type="text" id="c_banco" />
         </div>
         <div class="form-group">
+          <label class="form-label">Agência</label>
+          <input class="form-input" type="text" id="c_agencia" />
+        </div>
+        <div class="form-group">
           <label class="form-label">Conta</label>
           <input class="form-input" type="text" id="c_conta" />
         </div>
@@ -3083,7 +3087,7 @@ function gerarPDFRelatorio() {
     (c.responsavelTelefone || c.responsavelEmail) ? 'Contato do responsável: ' + (c.responsavelTelefone || '—') + '   |   ' + (c.responsavelEmail || '—') : null,
     (c.tecnicoNome || c.tecnicoRegistro) ? 'Técnico responsável: ' + (c.tecnicoNome || '—') + '   |   Registro: ' + (c.tecnicoRegistro || '—') : null,
     (c.tecnicoTelefone || c.tecnicoEmail) ? 'Contato do técnico: ' + (c.tecnicoTelefone || '—') + '   |   ' + (c.tecnicoEmail || '—') : null,
-    'Banco/Conta: ' + (c.banco || '—') + ' / ' + (c.conta || '—') + '   |   Contrapartida: ' + (c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : '—'),
+    'Banco/Agência/Conta: ' + (c.banco || '—') + ' / ' + (c.agencia || '—') + ' / ' + (c.conta || '—') + '   |   Contrapartida: ' + (c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : '—'),
     'Assinatura: ' + (c.dataAssinatura || '—') + '   |   Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '   |   PC até: ' + (c.prazoLimitePC || '—'),
   ].filter(Boolean);
   linhasCadastro.forEach(linha => { doc.text(linha, M, y); y += 5; });
@@ -3093,7 +3097,7 @@ function gerarPDFRelatorio() {
   doc.setFillColor(241, 245, 249);
   doc.roundedRect(M, y, W - 2 * M, 30, 3, 3, 'F');
   const cards = [
-    { label: 'Valor do Convênio', value: formatMoeda(resumo.valor), color: TEAL },
+    { label: 'Valor Total', value: formatMoeda(resumo.valorTotal), color: TEAL },
     { label: 'Movimento Extrato', value: formatMoeda(resumo.movExtrato), color: resumo.movExtrato >= 0 ? GREEN : [239, 68, 68] },
     { label: 'Total Pago', value: formatMoeda(resumo.totalPago), color: [239, 68, 68] },
     { label: 'Saldo Total', value: formatMoeda(resumo.saldoTotal), color: resumo.saldoTotal >= 0 ? GREEN : [239, 68, 68] },
