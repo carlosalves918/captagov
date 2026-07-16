@@ -33,7 +33,7 @@ const GRUPOS = [
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }) {
   const { state, mudarView, exportarDados, importarDados, abrirTelaBackups } = useApp();
   const viewAtual = state?.view;
   const ehProjetoAtual = (() => {
@@ -69,7 +69,10 @@ export default function Sidebar() {
                   key={item.id}
                   type="button"
                   className={`sidebar-nav-item ${viewAtual === item.id ? 'active' : ''}`}
-                  onClick={() => mudarView(item.id)}
+                  onClick={() => {
+                    mudarView(item.id);
+                    if (onNavigate) onNavigate();
+                  }}
                 >
                   <span className="icon">{item.icon}</span>
                   <span>{item.label}</span>

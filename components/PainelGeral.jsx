@@ -73,9 +73,9 @@ export default function PainelGeral() {
       </div>
 
       <div className="card mb-6">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <div className="card-title" style={{ marginBottom: 0 }}>Convênios e Projetos</div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div className="painel-toolbar" style={{ marginBottom: 20 }}>
+          <div className="card-title" style={{ marginBottom: 0, flex: '1 1 auto' }}>Convênios e Projetos</div>
+          <div className="painel-toolbar" style={{ gap: 12 }}>
             <div className="search-input">
               <span className="search-icon">🔍</span>
               <input

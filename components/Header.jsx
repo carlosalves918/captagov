@@ -29,7 +29,7 @@ const SECAO_DA_ABA = {
   usuarios: 'Administração',
 };
 
-export default function Header() {
+export default function Header({ onToggleMenu }) {
   const { state, mudarView } = useApp();
   if (!state) return null;
 
@@ -40,6 +40,14 @@ export default function Header() {
   return (
     <>
       <div className="main-header-left">
+        <button
+          type="button"
+          className="btn-menu-mobile"
+          onClick={onToggleMenu}
+          aria-label="Abrir menu"
+        >
+          ☰
+        </button>
         {!naPainel && (
           <button
             type="button"

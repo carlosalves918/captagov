@@ -77,6 +77,11 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color: var(--gray-800);
@@ -84,10 +89,20 @@ body {
   line-height: 1.6;
 }
 
+img, svg, canvas, video {
+  max-width: 100%;
+  height: auto;
+}
+
 /* — Layout principal — */
 .app-layout {
   display: flex;
   min-height: 100vh;
+  max-width: 100%;
+}
+
+.sidebar-overlay {
+  display: none;
 }
 
 .sidebar {
@@ -102,6 +117,8 @@ body {
   bottom: 0;
   z-index: 100;
   overflow-y: auto;
+  transition: transform 0.25s ease;
+  flex-shrink: 0;
 }
 
 .sidebar-header {
@@ -234,19 +251,22 @@ body {
 
 .main-content {
   flex: 1;
+  min-width: 0;
   margin-left: var(--sidebar-width);
   display: flex;
   flex-direction: column;
 }
 
 .main-header {
-  height: var(--header-height);
+  min-height: var(--header-height);
   background: var(--white);
   border-bottom: 1px solid var(--gray-200);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 32px;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 32px;
   position: sticky;
   top: 0;
   z-index: 50;
@@ -256,6 +276,21 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+}
+
+.btn-menu-mobile {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .main-header-title {
@@ -308,7 +343,13 @@ body {
 
 .main-body {
   flex: 1;
+  min-width: 0;
   padding: 32px;
+  max-width: 100%;
+}
+
+.main-body-legacy {
+  min-width: 0;
 }
 
 /* — Cards — */
@@ -319,6 +360,9 @@ body {
   border: 1px solid var(--gray-200);
   padding: 24px;
   transition: box-shadow 0.2s ease;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .card:hover {
@@ -356,6 +400,7 @@ body {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .stat-icon {
@@ -366,6 +411,7 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 23px;
+  flex-shrink: 0;
 }
 
 .stat-icon.blue {
@@ -388,13 +434,18 @@ body {
   color: var(--warning);
 }
 
-.stat-content {}
+.stat-content {
+  min-width: 0;
+  flex: 1;
+}
 
 .stat-value {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 25px;
+  font-size: clamp(18px, 4vw, 25px);
   font-weight: 700;
   color: var(--navy-900);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .stat-label {
@@ -408,8 +459,10 @@ body {
   background: var(--white);
   border-radius: var(--radius-lg);
   border: 1px solid var(--gray-200);
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: var(--shadow-sm);
+  max-width: 100%;
 }
 
 .table-header {
@@ -478,7 +531,7 @@ tbody tr:last-child td {
   display: flex;
   gap: 8px;
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 /* — Formários — */
@@ -835,8 +888,11 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 16px;
   transition: all 0.2s ease;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .convenio-card:hover {
@@ -845,7 +901,8 @@ tbody tr:last-child td {
 }
 
 .convenio-card-left {
-  flex: 1;
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .convenio-card-title {
@@ -854,17 +911,22 @@ tbody tr:last-child td {
   font-weight: 600;
   color: var(--navy-900);
   margin-bottom: 4px;
+  overflow-wrap: break-word;
 }
 
 .convenio-card-sub {
   font-size: 14px;
   color: var(--gray-500);
+  overflow-wrap: break-word;
 }
 
 .convenio-card-right {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .convenio-card-valores {
@@ -878,6 +940,14 @@ tbody tr:last-child td {
   padding-right: 12px;
   border-right: 1px solid var(--gray-200);
   margin-right: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.convenio-card-valores span {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
 }
 
 .convenio-card-valores strong {
@@ -888,6 +958,7 @@ tbody tr:last-child td {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   background: var(--green-100);
   border: 1px solid var(--green-300);
   border-radius: var(--radius-md);
@@ -896,12 +967,20 @@ tbody tr:last-child td {
   font-size: 14px;
   font-weight: 600;
   color: var(--navy-900);
+  gap: 8px;
+  max-width: 100%;
+}
+
+.valor-total-lista span {
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 
 .valor-total-lista strong {
   font-family: 'IBM Plex Mono', monospace;
   font-size: 18px;
   color: var(--green-600);
+  overflow-wrap: anywhere;
 }
 
 /* — Financeiro — */
@@ -917,6 +996,7 @@ tbody tr:last-child td {
   border-radius: var(--radius-md);
   padding: 16px;
   border: 1px solid var(--gray-200);
+  min-width: 0;
 }
 
 .fin-summary-label {
@@ -929,9 +1009,11 @@ tbody tr:last-child td {
 
 .fin-summary-value {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 23px;
+  font-size: clamp(16px, 3.5vw, 23px);
   font-weight: 700;
   color: var(--navy-900);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .fin-summary-value.positive { color: var(--green-600); }
@@ -957,6 +1039,19 @@ tbody tr:last-child td {
   display: none;
 }
 
+/* — Toolbar do Painel (busca + botões) — */
+.painel-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.painel-toolbar .search-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
 /* — Responsive — */
 @media (max-width: 1024px) {
   .sidebar {
@@ -974,17 +1069,51 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 768px) {
+  .btn-menu-mobile {
+    display: inline-flex;
+  }
+
   .sidebar {
-    display: none;
+    display: flex;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 85vw);
+    transform: translateX(-100%);
+    z-index: 200;
+    box-shadow: var(--shadow-xl);
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 27, 51, 0.55);
+    z-index: 150;
   }
   .main-content {
     margin-left: 0;
+    min-width: 0;
+    width: 100%;
+  }
+  .main-header {
+    padding: 10px 16px;
+  }
+  .main-header-title {
+    font-size: 17px;
   }
   .main-body {
-    padding: 20px;
+    padding: 16px;
+  }
+  .card {
+    padding: 18px;
   }
   .stats-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
   }
   .convenio-card {
     flex-direction: column;
@@ -1004,6 +1133,59 @@ tbody tr:last-child td {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+  .painel-toolbar {
+    width: 100%;
+  }
+  .painel-toolbar .search-input {
+    flex-basis: 100%;
+  }
+  .painel-toolbar .btn {
+    flex: 1 1 auto;
+  }
+
+  /* iOS aumenta o zoom automaticamente em inputs com fonte < 16px */
+  .form-input,
+  .search-input input {
+    font-size: 16px;
+  }
+
+  /* Rede de segurança para as telas ainda geradas pelo motor antigo
+     (public/js/app.js), que usam estilo inline com larguras fixas. */
+  #mainBody [style*="display:flex"],
+  .main-body-legacy [style*="display:flex"],
+  #mainBody [style*="display: flex"],
+  .main-body-legacy [style*="display: flex"] {
+    flex-wrap: wrap;
+  }
+  #mainBody [style*="min-width"],
+  .main-body-legacy [style*="min-width"] {
+    min-width: 0 !important;
+  }
+  #mainBody [style*="grid-template-columns:1fr 1fr"],
+  #mainBody [style*="grid-template-columns: 1fr 1fr"],
+  .main-body-legacy [style*="grid-template-columns:1fr 1fr"],
+  .main-body-legacy [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  #mainBody [style*="max-width"],
+  .main-body-legacy [style*="max-width"] {
+    max-width: 100% !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .sidebar-overlay {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+  .main-header-date {
+    display: none;
   }
 }
 
