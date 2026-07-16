@@ -4000,6 +4000,8 @@ function gerarPDFRelatorio() {
   const GREEN = [22, 163, 74];
   const GRAY = [100, 116, 139];
   const TEAL = [13, 148, 136];
+  const RED = [239, 68, 68];
+  const AMBER = [217, 119, 6];
 
   y = desenharCabecalhoPDF(doc, W, M, 'Relatório Financeiro');
   doc.setTextColor(...NAVY);
@@ -4013,8 +4015,75 @@ function gerarPDFRelatorio() {
   doc.text('Programa: ' + (c.programa || '—') + '  |  Convenente: ' + (c.conveniente || c.proponente || '—'), M, y);
   y += 6;
   doc.text('Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '  |  PC até: ' + (c.prazoLimitePC || '—'), M, y);
+  y += 12;
 
-  y += 14;
+  // ==================== RESUMO EXECUTIVO ====================
+  // Reaproveita a mesma lógica de status usada no restante do app
+  // (statusConvenio/statusVigencia) para o relatório nunca divergir
+  // do que é mostrado nas telas.
+  const statPC = statusConvenio(c);
+  const statVig = statusVigencia(c);
+  const pctExecutado = resumo.valorTotal > 0
+    ? Math.max(0, Math.min(1, resumo.totalPago / resumo.valorTotal))
+    : null;
+  const alertas = [];
+  if (statPC.cls === 'badge-danger') {
+    alertas.push({ cor: RED, texto: 'Prestação de contas vencida (prazo: ' + (c.prazoLimitePC || '—') + ').' });
+  } else if (statPC.cls === 'badge-warn') {
+    alertas.push({ cor: AMBER, texto: 'Prestação de contas vence em breve (prazo: ' + (c.prazoLimitePC || '—') + ').' });
+  }
+  if (statVig.cls === 'badge-danger') {
+    alertas.push({ cor: RED, texto: 'Vigência do convênio encerrada ou encerrando hoje.' });
+  } else if (statVig.cls === 'badge-warn') {
+    alertas.push({ cor: AMBER, texto: 'Vigência encerra em ' + statVig.dias + ' dia(s).' });
+  }
+  if (resumo.saldoTotal < 0) {
+    alertas.push({ cor: RED, texto: 'Saldo do convênio está negativo: ' + formatMoeda(resumo.saldoTotal) + '.' });
+  }
+
+  const alturaResumo = 18 + alertas.length * 5.5 + (pctExecutado !== null ? 8 : 0);
+  if (y + alturaResumo > 265) { doc.addPage(); y = 20; }
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.roundedRect(M, y, W - 2 * M, alturaResumo, 3, 3, 'FD');
+  let yResumo = y + 8;
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Resumo Executivo', M + 5, yResumo);
+  const corStatus = statPC.cls === 'badge-danger' ? RED : statPC.cls === 'badge-warn' ? AMBER : GREEN;
+  doc.setFontSize(9);
+  doc.setTextColor(...corStatus);
+  doc.text(statPC.label, W - M - 5, yResumo, { align: 'right' });
+  yResumo += 7;
+
+  if (pctExecutado !== null) {
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...GRAY);
+    doc.text('Executado: ' + (pctExecutado * 100).toFixed(1) + '% do valor total', M + 5, yResumo);
+    const barX = M + 5, barW = W - 2 * M - 10, barY = yResumo + 2;
+    doc.setFillColor(226, 232, 240);
+    doc.roundedRect(barX, barY, barW, 3, 1.5, 1.5, 'F');
+    doc.setFillColor(...(pctExecutado >= 1 ? GREEN : TEAL));
+    doc.roundedRect(barX, barY, Math.max(barW * pctExecutado, 3), 3, 1.5, 1.5, 'F');
+    yResumo += 9;
+  }
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  if (alertas.length === 0) {
+    doc.setTextColor(...GREEN);
+    doc.text('Nenhuma pendência crítica identificada.', M + 5, yResumo);
+  } else {
+    alertas.forEach(a => {
+      doc.setTextColor(...a.cor);
+      doc.text('•  ' + a.texto, M + 5, yResumo);
+      yResumo += 5.5;
+    });
+  }
+  y += alturaResumo + 10;
+
   // Dados cadastrais completos
   doc.setTextColor(...NAVY);
   doc.setFontSize(12);
@@ -4043,24 +4112,86 @@ function gerarPDFRelatorio() {
   doc.roundedRect(M, y, W - 2 * M, 30, 3, 3, 'F');
   const cards = [
     { label: 'Valor Total', value: formatMoeda(resumo.valorTotal), color: TEAL },
-    { label: 'Movimento Extrato', value: formatMoeda(resumo.movExtrato), color: resumo.movExtrato >= 0 ? GREEN : [239, 68, 68] },
-    { label: 'Total Pago', value: formatMoeda(resumo.totalPago), color: [239, 68, 68] },
-    { label: 'Saldo Total', value: formatMoeda(resumo.saldoTotal), color: resumo.saldoTotal >= 0 ? GREEN : [239, 68, 68] },
+    { label: 'Movimento Extrato', value: formatMoeda(resumo.movExtrato), color: resumo.movExtrato >= 0 ? GREEN : RED },
+    { label: 'Total Pago', value: formatMoeda(resumo.totalPago), color: GRAY },
+    { label: 'Saldo Total', value: formatMoeda(resumo.saldoTotal), color: resumo.saldoTotal >= 0 ? GREEN : RED },
   ];
   const cw = (W - 2 * M) / 4;
+  const larguraUtilCard = cw - 6; // espaço disponível pro valor sem invadir o card vizinho
   cards.forEach((card, i) => {
     const cx = M + i * cw;
     doc.setTextColor(...GRAY);
     doc.setFontSize(8);
     doc.text(card.label, cx + 3, y + 8);
     doc.setTextColor(...card.color);
-    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
+    // Reduz a fonte do valor até caber na largura do card — evita que
+    // convênios de valor alto (ex: R$ 12.847.392,50) estourem pro card
+    // vizinho e fiquem sobrepostos.
+    let fonteValor = 12;
+    doc.setFontSize(fonteValor);
+    while (fonteValor > 7 && doc.getTextWidth(card.value) > larguraUtilCard) {
+      fonteValor -= 0.5;
+      doc.setFontSize(fonteValor);
+    }
     doc.text(card.value, cx + 3, y + 22);
   });
   doc.setFont('helvetica', 'normal');
 
   y += 40;
+
+  // ==================== GRÁFICO DE EVOLUÇÃO FINANCEIRA ====================
+  // Barras entradas x saídas por mês, a partir do extrato bancário lançado.
+  if (fin.extratos && fin.extratos.length > 0) {
+    const alturaGrafico = 55;
+    if (y + alturaGrafico > 260) { doc.addPage(); y = 20; }
+    doc.setTextColor(...NAVY);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Evolução Financeira Mensal', M, y);
+    y += 6;
+
+    const extratosOrd = [...fin.extratos].sort((a, b) => a.mes.localeCompare(b.mes));
+    const gx0 = M, gy0 = y, gw = W - 2 * M, gh = 36;
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(gx0, gy0, gw, gh, 'S');
+    const maxValor = Math.max(1, ...extratosOrd.flatMap(e => [e.entradas || 0, e.saidas || 0]));
+    const nMeses = extratosOrd.length;
+    const wGrupo = gw / nMeses;
+    const wBarra = Math.min(6, wGrupo / 3.5);
+    extratosOrd.forEach((e, i) => {
+      const cxg = gx0 + i * wGrupo + wGrupo / 2;
+      const hEnt = ((e.entradas || 0) / maxValor) * (gh - 10);
+      const hSai = ((e.saidas || 0) / maxValor) * (gh - 10);
+      doc.setFillColor(...GREEN);
+      doc.rect(cxg - wBarra - 1, gy0 + gh - 8 - hEnt, wBarra, hEnt, 'F');
+      doc.setFillColor(...RED);
+      doc.rect(cxg + 1, gy0 + gh - 8 - hSai, wBarra, hSai, 'F');
+      doc.setFontSize(6);
+      doc.setTextColor(...GRAY);
+      doc.text(formatMes(e.mes).slice(0, 6), cxg, gy0 + gh - 2, { align: 'center' });
+    });
+    doc.setFillColor(...GREEN);
+    doc.rect(gx0, gy0 + gh + 4, 3, 3, 'F');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...GRAY);
+    doc.text('Entradas', gx0 + 5, gy0 + gh + 6.5);
+    doc.setFillColor(...RED);
+    doc.rect(gx0 + 25, gy0 + gh + 4, 3, 3, 'F');
+    doc.text('Saídas', gx0 + 30, gy0 + gh + 6.5);
+    y = gy0 + gh + 14;
+  }
+
+  // ==================== SUMÁRIO (ÍNDICE) ====================
+  // Reserva uma página em branco aqui (logo após a visão geral) e só a
+  // preenche no final, quando já sabemos em que página cada seção caiu —
+  // assim o índice fica no lugar certo (início do relatório) mesmo com
+  // conteúdo de tamanho variável pela frente.
+  doc.addPage();
+  const paginaIndice = doc.internal.getCurrentPageInfo().pageNumber;
+  doc.addPage();
+  y = 20;
+  const secoesIndice = [];
 
   // Contratadas
   if (fin.contratadas && fin.contratadas.length > 0) {
@@ -4069,6 +4200,7 @@ function gerarPDFRelatorio() {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Contratadas', M, y);
+    secoesIndice.push({ titulo: 'Contratadas', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     doc.autoTable({
@@ -4096,6 +4228,7 @@ function gerarPDFRelatorio() {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('Aditivos Contratuais', M, y);
+      secoesIndice.push({ titulo: 'Aditivos Contratuais', pagina: doc.internal.getCurrentPageInfo().pageNumber });
       y += 6;
       doc.autoTable({
         head: [['Contratada', 'Aditivo', 'Tipo', 'Assinatura', 'Valor Aditivado', 'Nova Vigência']],
@@ -4125,6 +4258,7 @@ function gerarPDFRelatorio() {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Pagamentos às Contratadas', M, y);
+    secoesIndice.push({ titulo: 'Pagamentos às Contratadas', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     const headers = [['Nº', 'Contratada', 'Data', 'Valor', 'Status', 'Documentos']];
@@ -4158,6 +4292,7 @@ function gerarPDFRelatorio() {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('Histórico de Status dos Pagamentos', M, y);
+      secoesIndice.push({ titulo: 'Histórico de Status dos Pagamentos', pagina: doc.internal.getCurrentPageInfo().pageNumber });
       y += 6;
       doc.autoTable({
         head: [['Pagamento nº', 'Status', 'Quando']],
@@ -4180,6 +4315,7 @@ function gerarPDFRelatorio() {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Extrato Bancário Mensal', M, y);
+    secoesIndice.push({ titulo: 'Extrato Bancário Mensal', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     const headers = [['Mês', 'Entradas', 'Saídas', 'Saldo do Mês']];
@@ -4205,6 +4341,7 @@ function gerarPDFRelatorio() {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Rendimentos', M, y);
+    secoesIndice.push({ titulo: 'Rendimentos', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     const headers = [['Mês', 'Aplicado', 'Rendimento']];
@@ -4219,6 +4356,45 @@ function gerarPDFRelatorio() {
       alternateRowStyles: { fillColor: [241, 245, 249] },
       margin: { left: M, right: M },
       theme: 'grid',
+    });
+  }
+
+  // ==================== PREENCHIMENTO DO SUMÁRIO ====================
+  // Volta para a página reservada lá no início e escreve o índice, já
+  // sabendo em que página cada seção efetivamente caiu.
+  doc.setPage(paginaIndice);
+  let ySum = 25;
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sumário', M, ySum);
+  ySum += 12;
+  doc.setFontSize(10.5);
+  if (secoesIndice.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...GRAY);
+    doc.text('Este convênio não possui seções financeiras adicionais lançadas.', M, ySum);
+  } else {
+    secoesIndice.forEach(s => {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+      const numPag = String(s.pagina);
+      const larguraPag = doc.getTextWidth(numPag);
+      const xTitulo = M;
+      const xPag = W - M;
+      doc.text(s.titulo, xTitulo, ySum);
+      doc.setTextColor(...GRAY);
+      doc.text(numPag, xPag, ySum, { align: 'right' });
+      // Linha pontilhada entre o título e o número da página
+      const xInicioPontos = xTitulo + doc.getTextWidth(s.titulo) + 2;
+      const xFimPontos = xPag - larguraPag - 2;
+      if (xFimPontos > xInicioPontos) {
+        doc.setLineDashPattern([0.5, 1.2], 0);
+        doc.setDrawColor(203, 213, 225);
+        doc.line(xInicioPontos, ySum - 1, xFimPontos, ySum - 1);
+        doc.setLineDashPattern([], 0);
+      }
+      ySum += 8;
     });
   }
 
