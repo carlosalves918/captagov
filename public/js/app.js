@@ -2227,7 +2227,7 @@ function renderContratadas(c) {
       <div class="card-title" style="font-size:16px;">${editando ? 'Editar Contratada' : 'Adicionar Contratada'}</div>
       <div class="card-subtitle">Cadastre empresas contratadas para vincular pagamentos.</div>
       
-      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group">
           <label class="form-label">Razão Social <span class="required">*</span></label>
           <input class="form-input" id="ct_razao" value="${escapeHtml(editando?.razaoSocial || '')}" />
@@ -2250,7 +2250,7 @@ function renderContratadas(c) {
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;max-width:800px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px;max-width:800px;">
         <div class="form-group">
           <label class="form-label">Início de Execução</label>
           <input class="form-input" type="date" id="ct_dataInicio" value="${escapeHtml(editando?.dataInicioVigencia || '')}" />
@@ -2262,7 +2262,7 @@ function renderContratadas(c) {
       </div>
       ${editando ? `<div class="card-subtitle" style="margin-top:6px;">Para aditivar valor ou prazo depois de salvo, use o botão <strong>Aditivos</strong> na tabela abaixo — os campos acima guardam sempre os dados <em>originais</em> do contrato.</div>` : ''}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;max-width:800px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px;max-width:800px;">
         <div class="form-group">
           <label class="form-label">Anexar Contrato (PDF/imagem)</label>
           <input class="form-input" type="file" id="ct_anexo" accept=".pdf,.jpg,.jpeg,.png" />
@@ -2348,7 +2348,7 @@ function renderAditivosPanel(ct) {
         Vigência atual: <strong>${ct.dataFimVigencia ? formatData(ct.dataFimVigencia) : '—'}</strong>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;align-items:end;">
         <div class="form-group">
           <label class="form-label">Tipo de Aditivo</label>
           <select class="form-input form-select" id="ad_tipo" onchange="atualizarCamposAditivo()">
@@ -2370,7 +2370,7 @@ function renderAditivosPanel(ct) {
         <button class="btn btn-primary" style="height:42px;" onclick="adicionarAditivo('${ct.id}')">+ Registrar Aditivo</button>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;max-width:700px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-top:10px;max-width:700px;">
         <div class="form-group" id="ad_bloco_valor">
           <label class="form-label">Valor Aditivado (R$) — será somado ao valor vigente</label>
           <input class="form-input" id="ad_valor" oninput="mascararValor(this)" inputmode="numeric" placeholder="0,00" />
@@ -2505,7 +2505,7 @@ function renderPagamentos(c, resumo) {
       <div class="card-subtitle">
         ${resumo.saldoContrato !== null ? `Saldo disponível no contrato: <strong style="color:${resumo.saldoContrato >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoContrato)}</strong> · ` : ''}Saldo disponível no convênio: <strong style="color:${resumo.saldoTotal >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoTotal)}</strong>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Contratada <span class="required">*</span></label>
           <select class="form-input form-select" id="pg_contratada">
             <option value="">Selecione...</option>
@@ -2561,7 +2561,7 @@ function renderExtratos(c) {
   return `
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">Lançar Extrato Mensal</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Mês <span class="required">*</span></label><input class="form-input" type="month" id="ex_mes" /></div>
         <div class="form-group"><label class="form-label">Entradas (R$)</label><input class="form-input" id="ex_entradas" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Saídas (R$)</label><input class="form-input" id="ex_saidas" oninput="mascararValor(this)" inputmode="numeric" /></div>
@@ -2604,7 +2604,7 @@ function renderRendimentos(c) {
   return `
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">Lançar Rendimento</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Mês <span class="required">*</span></label><input class="form-input" type="month" id="rd_mes" /></div>
         <div class="form-group"><label class="form-label">Aplicado (R$)</label><input class="form-input" id="rd_aplicado" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Rendimento (R$)</label><input class="form-input" id="rd_rendimento" oninput="mascararValor(this)" inputmode="numeric" /></div>

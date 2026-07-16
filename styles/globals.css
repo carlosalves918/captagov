@@ -754,6 +754,24 @@ tbody tr:last-child td {
   margin-bottom: 24px;
   border-bottom: 1px solid var(--gray-200);
   padding-bottom: 0;
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+
+/* Rede de segurança para todos os grids de formulário gerados
+   pelo motor antigo (public/js/app.js) em Contratadas, Pagamentos,
+   Extratos, Rendimentos e Aditivos: garante que nenhum campo/input
+   force o quadrante a estourar, mesmo em larguras intermediárias
+   antes das media queries de mobile entrarem em ação. */
+#mainBody .form-group,
+.main-body-legacy .form-group {
+  min-width: 0;
+}
+#mainBody .form-group .form-input,
+.main-body-legacy .form-group .form-input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .subtab {
