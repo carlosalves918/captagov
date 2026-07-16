@@ -1048,9 +1048,17 @@ async function registrarPagamento() {
   if (!c) return;
   const resumo = calcularResumoFinanceiro(c.id);
   const valor = parseMoeda(document.getElementById('pg_valor')?.value || '0');
-  const saldoRestante = resumo.saldoTotal - valor;
-  if (saldoRestante < -0.009) {
-    toastErro('Saldo insuficiente para este pagamento. Saldo atual: ' + formatMoeda(resumo.saldoTotal));
+
+  // Quando há contratada(s) cadastrada(s) (obra licitada), o pagamento não
+  // pode estourar o valor contratado — essa é a trava mais específica.
+  // Além disso, também não pode faltar dinheiro de fato no convênio
+  // (saldo do repasse/contrapartida, considerando extratos e rendimentos).
+  if (resumo.saldoContrato !== null && valor - resumo.saldoContrato > 0.009) {
+    toastErro('Saldo insuficiente no CONTRATO para este pagamento. Saldo disponível no contrato: ' + formatMoeda(resumo.saldoContrato));
+    return;
+  }
+  if (valor - resumo.saldoTotal > 0.009) {
+    toastErro('Saldo insuficiente no CONVÊNIO para este pagamento. Saldo disponível: ' + formatMoeda(resumo.saldoTotal));
     return;
   }
 
@@ -2093,7 +2101,9 @@ function renderPagamentos(c, resumo) {
   return `
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">Registrar Pagamento</div>
-      <div class="card-subtitle">Saldo disponível: <strong style="color:${resumo.saldoTotal >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoTotal)}</strong></div>
+      <div class="card-subtitle">
+        ${resumo.saldoContrato !== null ? `Saldo disponível no contrato: <strong style="color:${resumo.saldoContrato >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoContrato)}</strong> · ` : ''}Saldo disponível no convênio: <strong style="color:${resumo.saldoTotal >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoTotal)}</strong>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Contratada <span class="required">*</span></label>
           <select class="form-input form-select" id="pg_contratada">
@@ -2106,6 +2116,7 @@ function renderPagamentos(c, resumo) {
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="pg_obs" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="registrarPagamento()">+ Registrar</button>
       </div>
+      <div class="card-subtitle" style="margin-top:8px;">Saldo após este pagamento: <strong id="saldoPreview">—</strong></div>
     </div>
     ${fin.pagamentos && fin.pagamentos.length > 0 ? `
       <div class="table-wrapper">
@@ -3200,9 +3211,15 @@ function updateSaldoPreview() {
   if (!STATE.convenioAtualId) return;
   const resumo = calcularResumoFinanceiro(STATE.convenioAtualId);
   const valorPgto = parseMoeda(document.getElementById('pg_valor')?.value || '0');
-  const saldo = resumo.saldoTotal - valorPgto;
   const el = document.getElementById('saldoPreview');
-  if (el) {
+  if (!el) return;
+  if (resumo.saldoContrato !== null) {
+    const saldoContratoPos = resumo.saldoContrato - valorPgto;
+    const saldoConvenioPos = resumo.saldoTotal - valorPgto;
+    el.textContent = 'Contrato: ' + formatMoeda(saldoContratoPos) + '  ·  Convênio: ' + formatMoeda(saldoConvenioPos);
+    el.style.color = (saldoContratoPos < 0 || saldoConvenioPos < 0) ? 'var(--danger)' : 'var(--green-600)';
+  } else {
+    const saldo = resumo.saldoTotal - valorPgto;
     el.textContent = formatMoeda(saldo);
     el.style.color = saldo < 0 ? 'var(--danger)' : 'var(--green-600)';
   }
