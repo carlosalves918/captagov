@@ -61,7 +61,7 @@ export default function Header({ onToggleMenu }) {
         <div>
           {secao && <div className="main-header-eyebrow">{secao}</div>}
           <div className="main-header-title">{NOMES_ABAS[state.view] || state.view}</div>
-          {c && (
+          {!naPainel && c && (
             <div className="main-header-breadcrumb">
               {c.conveniente || c.proponente || 'Convenente não informado'} · Convênio nº {c.numero || 'sem número'}
             </div>

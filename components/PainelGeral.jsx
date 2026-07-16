@@ -173,13 +173,22 @@ export default function PainelGeral() {
             const contrapartida = res ? res.contrapartida : 0;
             const totalConvenio = res ? res.valorTotal : 0;
             const vig = statusVigencia(c);
+            const ativo = c.id === state.convenioAtualId;
             return (
-              <div className="convenio-card" key={c.id}>
+              <div
+                className={`convenio-card ${ativo ? 'convenio-card-ativo' : ''}`}
+                key={c.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => editarConvenio(c.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') editarConvenio(c.id); }}
+              >
                 <div className="convenio-card-left">
                   <div className="convenio-card-title">
                     <span className={`badge ${c.tipo === 'projeto' ? 'badge-info' : 'badge-ok'}`}>
                       {c.tipo === 'projeto' ? 'Projeto' : 'Convênio'}
                     </span>{' '}
+                    {ativo && <span className="badge badge-ok" style={{ marginRight: 4 }}>● Em andamento</span>}
                     {c.numero || 'sem número'} — {c.programa || 'Sem programa'}
                   </div>
                   <div className="convenio-card-sub">{c.conveniente || c.proponente || 'Convenente não informado'}</div>
@@ -188,7 +197,7 @@ export default function PainelGeral() {
                     <span className={`badge ${vig.cls}`}>{vig.label}</span>
                   </div>
                 </div>
-                <div className="convenio-card-right">
+                <div className="convenio-card-right" onClick={(e) => e.stopPropagation()}>
                   <div className="convenio-card-valores">
                     <span className="font-mono">Repasse: <strong>{formatMoeda(repasse)}</strong></span>
                     <span className="font-mono">Contrapartida: <strong>{formatMoeda(contrapartida)}</strong></span>

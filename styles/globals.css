@@ -917,6 +917,13 @@ tbody tr:last-child td {
   transition: all 0.2s ease;
   min-width: 0;
   max-width: 100%;
+  cursor: pointer;
+}
+
+.convenio-card-ativo {
+  border-color: var(--green-500);
+  border-width: 2px;
+  background: var(--green-100);
 }
 
 .convenio-card:hover {
