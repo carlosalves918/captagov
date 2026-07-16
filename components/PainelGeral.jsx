@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { formatMoeda, parseMoeda, statusConvenio } from '../public/js/utils.js';
+import { formatMoeda, parseMoeda, statusConvenio, formatData, statusVigencia, contarVigenciasAVencer } from '../public/js/utils.js';
 
 export default function PainelGeral() {
   const { state, tick, novoConvenio, editarConvenio, abrirPrestacaoContas, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
@@ -20,6 +20,7 @@ export default function PainelGeral() {
     const st = statusConvenio(c);
     return st.cls === 'badge-warn' || st.cls === 'badge-danger';
   }).length;
+  const vigenciasAVencer = contarVigenciasAVencer(convenios, 30);
 
   const termoBusca = termo.trim().toLowerCase();
   const lista = termoBusca
@@ -60,6 +61,13 @@ export default function PainelGeral() {
           <div className="stat-content">
             <div className="stat-value">{pendentesPC}</div>
             <div className="stat-label">PC Pendente / Vencida</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon danger">📅</div>
+          <div className="stat-content">
+            <div className="stat-value">{vigenciasAVencer}</div>
+            <div className="stat-label">Vigências a Vencer (30d) / Vencidas</div>
           </div>
         </div>
       </div>
@@ -105,6 +113,7 @@ export default function PainelGeral() {
             const repasse = res ? res.valor : 0;
             const contrapartida = res ? res.contrapartida : 0;
             const totalConvenio = res ? res.valorTotal : 0;
+            const vig = statusVigencia(c);
             return (
               <div className="convenio-card" key={c.id}>
                 <div className="convenio-card-left">
@@ -115,6 +124,10 @@ export default function PainelGeral() {
                     {c.numero || 'sem número'} — {c.programa || 'Sem programa'}
                   </div>
                   <div className="convenio-card-sub">{c.conveniente || c.proponente || 'Convenente não informado'}</div>
+                  <div className="convenio-card-vigencia">
+                    <span>📅 Vigência: {formatData(c.dataInicio)} a {formatData(c.dataFim)}</span>
+                    <span className={`badge ${vig.cls}`}>{vig.label}</span>
+                  </div>
                 </div>
                 <div className="convenio-card-right">
                   <div className="convenio-card-valores">

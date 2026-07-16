@@ -434,6 +434,11 @@ img, svg, canvas, video {
   color: var(--warning);
 }
 
+.stat-icon.danger {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
 .stat-content {
   min-width: 0;
   flex: 1;
@@ -919,6 +924,16 @@ tbody tr:last-child td {
   font-size: 14px;
   color: var(--gray-500);
   overflow-wrap: break-word;
+}
+
+.convenio-card-vigencia {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--gray-500);
 }
 
 .convenio-card-right {

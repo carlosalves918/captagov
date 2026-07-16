@@ -85,6 +85,39 @@ export function statusConvenio(c) {
   return { label: 'Em execução', cls: 'badge-ok' };
 }
 
+// ==================== VIGÊNCIA (dataInicio / dataFim) ====================
+// Formata uma data ISO (YYYY-MM-DD) para pt-BR (DD/MM/AAAA).
+export function formatData(dataISO) {
+  if (!dataISO) return '—';
+  const d = new Date(dataISO + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR');
+}
+
+// Calcula quantos dias faltam (ou já passaram) até o fim da vigência
+// e devolve um badge (mesma lógica visual de statusConvenio, mas
+// olhando para dataFim em vez de prazoLimitePC).
+export function statusVigencia(c) {
+  if (!c.dataFim) return { label: 'Sem vigência definida', cls: 'badge-info', dias: null };
+  const fim = new Date(c.dataFim + 'T00:00:00');
+  if (Number.isNaN(fim.getTime())) return { label: 'Sem vigência definida', cls: 'badge-info', dias: null };
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const diff = Math.floor((fim - hoje) / (1000 * 60 * 60 * 24));
+  if (diff < 0) return { label: 'Vigência encerrada', cls: 'badge-danger', dias: diff };
+  if (diff === 0) return { label: 'Encerra hoje', cls: 'badge-danger', dias: diff };
+  if (diff <= 30) return { label: diff + 'd para encerrar', cls: 'badge-warn', dias: diff };
+  return { label: 'Vigente', cls: 'badge-ok', dias: diff };
+}
+
+// Convênios cuja vigência já venceu ou vence em até `limiteDias` dias.
+export function contarVigenciasAVencer(convenios, limiteDias = 30) {
+  return (convenios || []).filter((c) => {
+    const v = statusVigencia(c);
+    return v.dias !== null && v.dias <= limiteDias;
+  }).length;
+}
+
 // ==================== VALIDAÇÃO (NOVO) ====================
 // Antes o app só mascarava CPF/CNPJ visualmente, sem checar o dígito
 // verificador. Isso permitia salvar convênios com CNPJ/CPF inválido,
