@@ -50,6 +50,7 @@ const STATE = {
   docGeradoTipo: null,
   docGeradoTexto: null,
   docGeradoEhModelo: false,
+  docEditandoId: null,
 };
 
 // Tipos de emenda parlamentar disponíveis
@@ -2220,6 +2221,10 @@ function renderGestaoDocumentos() {
 // montagem de template). Pros tipos que exigem análise técnica (DFD, ETP,
 // TR, Projeto Básico, Matriz de Risco, Plano de Ação), mostra um modelo
 // estruturado pra preencher, em vez de fingir que foi gerado sozinho.
+//
+// Preparado para, no futuro (build Electron), trocar `gerarDocumentoAutomatico`
+// por uma chamada real à API da Anthropic (ver STUB abaixo) sem mudar o
+// resto do fluxo: geração -> revisão -> salvar -> editar/aprovar/remover.
 function gerarDocumento(tipoId) {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
@@ -2229,12 +2234,29 @@ function gerarDocumento(tipoId) {
   STATE.docGeradoTipo = tipoId;
   STATE.docGeradoTexto = auto || gerarModeloEsqueleto(tipoId, c, rt, usuario) || '';
   STATE.docGeradoEhModelo = !auto;
+  STATE.docEditandoId = null;
   renderTudo();
+}
+
+// STUB — quando o app virar Electron com acesso à internet, esta função passa
+// a chamar de fato a API da Anthropic (fetch para api.anthropic.com/v1/messages
+// com a chave lida de um arquivo local de configuração). Por enquanto ela só
+// encaminha para a geração offline por template, mantendo a mesma assinatura,
+// para que o resto do app (salvar/editar/aprovar/remover) não precise mudar.
+async function gerarDocumentoComIA(tipoId, contextoExtra) {
+  // eslint-disable-next-line no-unused-vars
+  const _contexto = contextoExtra; // reservado para o prompt, quando a integração real existir
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return null;
+  const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
+  const usuario = STATE.usuarios.find(x => x.id === STATE.usuarioSelecionadoId) || null;
+  return gerarDocumentoAutomatico(tipoId, c, rt, usuario) || gerarModeloEsqueleto(tipoId, c, rt, usuario) || '';
 }
 
 function fecharDocumentoGerado() {
   STATE.docGeradoTipo = null;
   STATE.docGeradoTexto = null;
+  STATE.docEditandoId = null;
   renderTudo();
 }
 
@@ -2250,38 +2272,143 @@ function baixarDocumentoGerado() {
   const el = document.getElementById('docGeradoTexto');
   if (!el) return;
   const tipo = TIPOS_DOC_IA.find(t => t.id === STATE.docGeradoTipo);
-  const blob = new Blob([el.value], { type: 'text/plain;charset=utf-8' });
+  baixarTextoComoArquivo(el.value, tipo ? tipo.nome : 'documento');
+}
+
+function baixarTextoComoArquivo(texto, nomeBase) {
+  const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = (tipo ? tipo.nome.replace(/\s+/g, '_') : 'documento') + '.txt';
+  a.download = (nomeBase || 'documento').replace(/\s+/g, '_') + '.txt';
   document.body.appendChild(a);
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+// Grava (ou atualiza, se já existir docEditandoId) o texto revisado na lista
+// permanente de documentos do convênio — a partir daqui ele passa a ter um
+// histórico e pode ser reaberto, aprovado ou removido depois.
+function salvarDocumentoGerado() {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const el = document.getElementById('docGeradoTexto');
+  if (!el) return;
+  if (!c.docsGeradosIA) c.docsGeradosIA = [];
+
+  if (STATE.docEditandoId) {
+    const doc = c.docsGeradosIA.find(d => d.id === STATE.docEditandoId);
+    if (doc) {
+      doc.texto = el.value;
+      doc.atualizadoEm = new Date().toISOString();
+      toastSucesso('Documento atualizado.');
+    }
+  } else {
+    const tipo = TIPOS_DOC_IA.find(t => t.id === STATE.docGeradoTipo);
+    c.docsGeradosIA.push({
+      id: gerarId('doc'),
+      tipoId: STATE.docGeradoTipo,
+      titulo: tipo ? tipo.nome : 'Documento',
+      texto: el.value,
+      status: 'rascunho',
+      criadoEm: new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+    });
+    toastSucesso('Documento salvo na lista do convênio.');
+  }
+
+  salvarEstado();
+  STATE.docGeradoTipo = null;
+  STATE.docGeradoTexto = null;
+  STATE.docEditandoId = null;
+  renderTudo();
+}
+
+// Reabre um documento já salvo no editor de texto para revisão.
+function editarDocumentoSalvo(id) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c || !c.docsGeradosIA) return;
+  const doc = c.docsGeradosIA.find(d => d.id === id);
+  if (!doc) return;
+  STATE.docGeradoTipo = doc.tipoId;
+  STATE.docGeradoTexto = doc.texto;
+  STATE.docGeradoEhModelo = false;
+  STATE.docEditandoId = id;
+  renderTudo();
+}
+
+function aprovarDocumentoSalvo(id) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c || !c.docsGeradosIA) return;
+  const doc = c.docsGeradosIA.find(d => d.id === id);
+  if (!doc) return;
+  doc.status = 'aprovado';
+  doc.aprovadoEm = new Date().toISOString();
+  salvarEstado();
+  toastSucesso('Documento marcado como aprovado.');
+  renderTudo();
+}
+
+function reverterDocumentoSalvo(id) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c || !c.docsGeradosIA) return;
+  const doc = c.docsGeradosIA.find(d => d.id === id);
+  if (!doc) return;
+  doc.status = 'rascunho';
+  doc.aprovadoEm = null;
+  salvarEstado();
+  renderTudo();
+}
+
+function baixarDocumentoSalvo(id) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c || !c.docsGeradosIA) return;
+  const doc = c.docsGeradosIA.find(d => d.id === id);
+  if (!doc) return;
+  baixarTextoComoArquivo(doc.texto, doc.titulo);
+}
+
+function removerDocumentoSalvo(id) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c || !c.docsGeradosIA) return;
+  const doc = c.docsGeradosIA.find(d => d.id === id);
+  if (!doc) return;
+  if (!confirm('Remover o documento "' + doc.titulo + '"? Esta ação não pode ser desfeita.')) return;
+  c.docsGeradosIA = c.docsGeradosIA.filter(d => d.id !== id);
+  salvarEstado();
+  toastSucesso('Documento removido.');
+  renderTudo();
+}
+
 function renderDocsIA() {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+
   if (STATE.docGeradoTipo) {
     const tipo = TIPOS_DOC_IA.find(t => t.id === STATE.docGeradoTipo);
+    const editando = !!STATE.docEditandoId;
     return `
-      <div class="card-title" style="font-size:16px;">${escapeHtml(tipo ? tipo.nome : 'Documento')}</div>
+      <div class="card-title" style="font-size:16px;">${escapeHtml(tipo ? tipo.nome : 'Documento')}${editando ? ' <span class="badge badge-info" style="margin-left:8px;">Editando</span>' : ''}</div>
       <div class="card-subtitle">
-        ${STATE.docGeradoEhModelo
-          ? 'Modelo estruturado — este tipo de documento exige análise técnica, então preparamos as seções corretas para você preencher.'
-          : 'Gerado automaticamente a partir dos dados do convênio selecionado. Revise antes de usar oficialmente.'}
+        ${editando
+          ? 'Revisando um documento já salvo. Ao salvar, a versão anterior é substituída.'
+          : STATE.docGeradoEhModelo
+            ? 'Modelo estruturado — este tipo de documento exige análise técnica, então preparamos as seções corretas para você preencher.'
+            : 'Gerado automaticamente a partir dos dados do convênio selecionado. Revise antes de usar oficialmente.'}
       </div>
       <textarea id="docGeradoTexto" class="form-input" style="margin-top:12px;min-height:360px;font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.5;">${escapeHtml(STATE.docGeradoTexto || '')}</textarea>
-      <div style="display:flex;gap:8px;margin-top:12px;">
-        <button class="btn btn-primary" onclick="copiarDocumentoGerado()">Copiar</button>
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="salvarDocumentoGerado()">💾 ${editando ? 'Salvar alterações' : 'Salvar documento'}</button>
+        <button class="btn btn-secondary" onclick="copiarDocumentoGerado()">Copiar</button>
         <button class="btn btn-secondary" onclick="baixarDocumentoGerado()">Baixar .txt</button>
-        <button class="btn btn-secondary" onclick="fecharDocumentoGerado()">Voltar</button>
+        <button class="btn btn-ghost" onclick="fecharDocumentoGerado()">Cancelar</button>
       </div>
     `;
   }
+
   return `
     <div class="card-title" style="font-size:16px;">Geração de Documentos</div>
-    <div class="card-subtitle">Preenchimento automático a partir dos dados do convênio selecionado no Painel — sem IA, 100% offline.</div>
+    <div class="card-subtitle">Preenchimento automático a partir dos dados do convênio selecionado no Painel — sem IA, 100% offline (pronto para IA real quando o app virar Electron).</div>
     ${STATE.responsaveisTecnicos.length > 0 ? `
     <div class="form-group full-width" style="margin-top:12px;max-width:420px;">
       <label class="form-label">Responsável técnico (assina Justificativa/Plano de Trabalho)</label>
@@ -2308,6 +2435,42 @@ function renderDocsIA() {
           <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">${t.desc}</div>
           <div style="font-size:11px;margin-top:8px;font-weight:600;color:${TIPOS_COM_AUTOPREENCHIMENTO.includes(t.id) ? 'var(--green-600)' : 'var(--gray-500)'};">
             ${TIPOS_COM_AUTOPREENCHIMENTO.includes(t.id) ? '✓ Preenchimento automático' : '○ Modelo para preencher'}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ${renderDocumentosSalvos(c)}
+  `;
+}
+
+// Lista dos documentos já salvos para o convênio selecionado, com os
+// controles pós-geração: editar (reabre no editor), aprovar/reverter status,
+// baixar e remover.
+function renderDocumentosSalvos(c) {
+  if (!c) return '';
+  const docs = c.docsGeradosIA || [];
+  if (docs.length === 0) return '';
+  return `
+    <div class="card-title" style="font-size:16px;margin-top:28px;">Documentos Salvos (${docs.length})</div>
+    <div style="margin-top:8px;">
+      ${docs.slice().reverse().map(doc => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);margin-bottom:8px;">
+          <div style="min-width:0;">
+            <div style="font-weight:500;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              ${escapeHtml(doc.titulo)}
+              <span class="badge ${doc.status === 'aprovado' ? 'badge-ok' : 'badge-warn'}">${doc.status === 'aprovado' ? 'Aprovado' : 'Rascunho'}</span>
+            </div>
+            <div style="font-size:12px;color:var(--gray-500);">
+              Salvo em ${new Date(doc.criadoEm).toLocaleDateString('pt-BR')}${doc.atualizadoEm && doc.atualizadoEm !== doc.criadoEm ? ' · editado em ' + new Date(doc.atualizadoEm).toLocaleDateString('pt-BR') : ''}
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" onclick="editarDocumentoSalvo('${doc.id}')">✏️ Editar</button>
+            ${doc.status === 'aprovado'
+              ? `<button class="btn btn-ghost btn-sm" onclick="reverterDocumentoSalvo('${doc.id}')">↩ Reverter p/ rascunho</button>`
+              : `<button class="btn btn-ghost btn-sm" style="color:var(--green-600);" onclick="aprovarDocumentoSalvo('${doc.id}')">✓ Aprovar</button>`}
+            <button class="btn btn-ghost btn-sm" onclick="baixarDocumentoSalvo('${doc.id}')">⬇ Baixar</button>
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerDocumentoSalvo('${doc.id}')">🗑 Remover</button>
           </div>
         </div>
       `).join('')}
@@ -3267,9 +3430,9 @@ function gerarPDFRelatorio() {
 // chamada dessa forma precisa ser atribuída a window explicitamente.
 Object.assign(window, {
   abrirPrestacaoContas, abrirTelaBackups, adicionarContratada, adicionarDocExtra, anexarDocExtra,
-  anexarDocPagamento, baixarDocumentoGerado, cancelarEdicaoContratada,
+  anexarDocPagamento, aprovarDocumentoSalvo, baixarDocumentoGerado, baixarDocumentoSalvo, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
-  editarEmenda, editarInstituicao, editarProponente, editarResponsavelTecnico, editarUsuario,
+  editarDocumentoSalvo, editarEmenda, editarInstituicao, editarProponente, editarResponsavelTecnico, editarUsuario,
   escapeHtml, excluirConvenio, excluirEmenda,
   excluirInstituicao, excluirProponente, excluirResponsavelTecnico, excluirUsuario, exportarAnexosZIP,
   exportarCSVFinanceiro, exportarDados, fecharDocumentoGerado, gerarDocumento,
@@ -3278,9 +3441,9 @@ Object.assign(window, {
   mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
   registrarPagamento,
   removerAnexoExtrato, removerAnexoRendimento, removerContratada,
-  removerDocExtra, removerDocPagamento, removerExtrato, removerPagamento,
+  removerDocExtra, removerDocPagamento, removerDocumentoSalvo, removerExtrato, removerPagamento,
   removerRendimento, renderTudo, renderBody, restaurarSnapshotAuto, excluirSnapshotAuto,
-  salvarConvenio, salvarEmenda, salvarInstituicao, salvarProponente,
+  reverterDocumentoSalvo, salvarConvenio, salvarDocumentoGerado, salvarEmenda, salvarInstituicao, salvarProponente,
   salvarResponsavelTecnico, salvarUsuario,
   toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
