@@ -3115,7 +3115,10 @@ function renderRelatorios() {
     `}
 
     <div class="card mt-6">
-      <div class="card-title" style="font-size:16px;">Relatório Geral — Todos os Convênios</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+        <div class="card-title" style="font-size:16px;">Relatório Geral — Todos os Convênios</div>
+        <button class="btn btn-primary" onclick="gerarPDFRelatorioGeral()">📥 Gerar PDF Consolidado</button>
+      </div>
       <div class="table-wrapper" style="margin-top:16px;">
         <table>
           <thead><tr><th>Convênio</th><th>Programa</th><th>Convenente</th><th>Repasse</th><th>Contrapartida</th><th>Total</th><th>Saldo</th><th>PC até</th></tr></thead>
@@ -3916,6 +3919,55 @@ function desenharCabecalhoPDF(doc, W, M, subtitulo) {
   return 40;
 }
 
+// ==================== VERIFICAÇÃO DO DOCUMENTO ====================
+// Gera um código de verificação (hash SHA-256 truncado) a partir dos dados
+// centrais do relatório + data/hora de emissão. Não é uma assinatura digital
+// (o PDF em si continua editável), mas permite detectar adulteração: quem
+// receber o documento pode reconferir os dados de origem no CaptaGov e
+// comparar com o código impresso no rodapé — se algo foi alterado depois de
+// gerado, os dados não vão bater com o código.
+async function gerarCodigoVerificacao(payload) {
+  try {
+    const texto = JSON.stringify(payload);
+    const bytes = new TextEncoder().encode(texto);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hex.slice(0, 16).toUpperCase().match(/.{1,4}/g).join('-');
+  } catch (e) {
+    return null; // navegador sem Web Crypto (contexto não seguro, ex: http:// sem localhost) — segue sem código
+  }
+}
+
+// Desenha o rodapé (paginação + emissor + código de verificação) em todas as
+// páginas do documento. Chamada por último, quando o total de páginas e o
+// conteúdo já estão fechados, para o hash refletir o documento final.
+async function finalizarComVerificacao(doc, W, M, GRAY, tituloDoc, payloadExtra) {
+  const usuarioEmissor = STATE.usuarios.find(u => u.id === STATE.usuarioSelecionadoId);
+  const agora = new Date();
+  const codigo = await gerarCodigoVerificacao({
+    tipo: tituloDoc,
+    emitidoEm: agora.toISOString(),
+    emissor: usuarioEmissor ? usuarioEmissor.nome : null,
+    ...payloadExtra,
+  });
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(...GRAY);
+    doc.text('CaptaGov — ' + tituloDoc + ' — Página ' + i + ' de ' + totalPages, M, 290, { align: 'left' });
+    doc.text('Gerado em ' + agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR'), W - M, 290, { align: 'right' });
+    if (usuarioEmissor) {
+      doc.text('Emitido por: ' + usuarioEmissor.nome, M, 294);
+    }
+    if (codigo) {
+      doc.text('Código de verificação: ' + codigo, W - M, 294, { align: 'right' });
+    }
+  }
+  return codigo;
+}
+
 // Monta um PDF formatado (timbre + título + corpo do texto com quebra de
 // página automática) a partir do texto de um documento gerado (Ofício,
 // Memorando, Justificativa etc.) — em vez do antigo .txt sem formatação.
@@ -3984,7 +4036,7 @@ function baixarDocumentoSalvoPDF(id) {
   pdf.save(docSalvo.titulo.replace(/\s+/g, '_') + '.pdf');
 }
 
-function gerarPDFRelatorio() {
+async function gerarPDFRelatorio() {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) { toastAviso('Selecione um convênio.'); return; }
   const resumo = calcularResumoFinanceiro(c.id);
@@ -4398,24 +4450,149 @@ function gerarPDFRelatorio() {
     });
   }
 
-  // Rodapé
-  const usuarioEmissor = STATE.usuarios.find(u => u.id === STATE.usuarioSelecionadoId);
-  const totalPages = doc.internal.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(...GRAY);
-    doc.text('CaptaGov — Relatório Financeiro — Página ' + i + ' de ' + totalPages, M, 290, { align: 'left' });
-    doc.text('Gerado em ' + new Date().toLocaleDateString('pt-BR'), W - M, 290, { align: 'right' });
-    if (usuarioEmissor) {
-      doc.text('Emitido por: ' + usuarioEmissor.nome, M, 294);
-    }
-  }
+  // Rodapé + código de verificação
+  await finalizarComVerificacao(doc, W, M, GRAY, 'Relatório Financeiro', {
+    convenioId: c.id,
+    convenioNumero: c.numero || null,
+    valorTotal: resumo.valorTotal,
+    saldoTotal: resumo.saldoTotal,
+    totalPago: resumo.totalPago,
+  });
 
   doc.save('relatorio-' + (c.numero || 'convenio') + '.pdf');
 }
 
-// ==================== EXPOSIÇÃO GLOBAL ====================
+// Relatório consolidado — visão de portfólio com todos os convênios
+// cadastrados numa única página de resumo + tabela geral. Complementa o
+// relatório individual (que é por convênio); este dá a visão de gestor.
+async function gerarPDFRelatorioGeral() {
+  if (!STATE.convenios || STATE.convenios.length === 0) {
+    toastAviso('Nenhum convênio cadastrado.');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const W = 210, M = 20;
+  let y = 20;
+
+  const NAVY = [11, 27, 51];
+  const GREEN = [22, 163, 74];
+  const GRAY = [100, 116, 139];
+  const TEAL = [13, 148, 136];
+  const RED = [239, 68, 68];
+  const AMBER = [217, 119, 6];
+
+  y = desenharCabecalhoPDF(doc, W, M, 'Relatório Geral — Todos os Convênios');
+
+  const linhas = STATE.convenios.map(cv => ({
+    cv, res: calcularResumoFinanceiro(cv.id), st: statusConvenio(cv),
+  }));
+  const totalRepasse = linhas.reduce((a, l) => a + (l.res ? l.res.valor : 0), 0);
+  const totalContrapartida = linhas.reduce((a, l) => a + (l.res ? l.res.contrapartida : 0), 0);
+  const totalGeral = linhas.reduce((a, l) => a + (l.res ? l.res.valorTotal : 0), 0);
+  const saldoGeral = linhas.reduce((a, l) => a + (l.res ? l.res.saldoTotal : 0), 0);
+  const qtdPCVencida = linhas.filter(l => l.st.cls === 'badge-danger').length;
+  const qtdPCAlerta = linhas.filter(l => l.st.cls === 'badge-warn').length;
+
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Visão Consolidada do Portfólio', M, y);
+  y += 8;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(...GRAY);
+  doc.text(linhas.length + ' convênio(s) cadastrado(s)', M, y);
+  y += 10;
+
+  // Cards de totais do portfólio
+  const alturaCards = 30;
+  doc.setFillColor(241, 245, 249);
+  doc.roundedRect(M, y, W - 2 * M, alturaCards, 3, 3, 'F');
+  const cards = [
+    { label: 'Repasse Total', value: formatMoeda(totalRepasse), color: TEAL },
+    { label: 'Contrapartida Total', value: formatMoeda(totalContrapartida), color: GRAY },
+    { label: 'Valor Total Geral', value: formatMoeda(totalGeral), color: NAVY },
+    { label: 'Saldo Consolidado', value: formatMoeda(saldoGeral), color: saldoGeral >= 0 ? GREEN : RED },
+  ];
+  const cw = (W - 2 * M) / 4;
+  cards.forEach((card, i) => {
+    const cx = M + i * cw;
+    doc.setTextColor(...GRAY);
+    doc.setFontSize(8);
+    doc.text(card.label, cx + 3, y + 8);
+    doc.setTextColor(...card.color);
+    doc.setFont('helvetica', 'bold');
+    let fonteValor = 11;
+    doc.setFontSize(fonteValor);
+    while (fonteValor > 6.5 && doc.getTextWidth(card.value) > cw - 6) {
+      fonteValor -= 0.5;
+      doc.setFontSize(fonteValor);
+    }
+    doc.text(card.value, cx + 3, y + 22);
+  });
+  doc.setFont('helvetica', 'normal');
+  y += alturaCards + 8;
+
+  // Alertas agregados de prestação de contas
+  doc.setFontSize(9);
+  if (qtdPCVencida > 0 || qtdPCAlerta > 0) {
+    if (qtdPCVencida > 0) {
+      doc.setTextColor(...RED);
+      doc.text('•  ' + qtdPCVencida + ' convênio(s) com prestação de contas vencida.', M, y);
+      y += 5.5;
+    }
+    if (qtdPCAlerta > 0) {
+      doc.setTextColor(...AMBER);
+      doc.text('•  ' + qtdPCAlerta + ' convênio(s) com PC vencendo em até 30 dias.', M, y);
+      y += 5.5;
+    }
+  } else {
+    doc.setTextColor(...GREEN);
+    doc.text('Nenhum convênio com pendência crítica de prestação de contas.', M, y);
+    y += 5.5;
+  }
+  y += 6;
+
+  // Tabela consolidada
+  doc.autoTable({
+    head: [['Convênio', 'Programa', 'Convenente', 'Repasse', 'Contrapartida', 'Total', 'Saldo', 'Status PC']],
+    body: linhas.map(({ cv, res, st }) => [
+      cv.numero || '?',
+      cv.programa || '—',
+      cv.conveniente || cv.proponente || '—',
+      formatMoeda(res ? res.valor : 0),
+      formatMoeda(res ? res.contrapartida : 0),
+      formatMoeda(res ? res.valorTotal : 0),
+      formatMoeda(res ? res.saldoTotal : 0),
+      st.label,
+    ]),
+    startY: y,
+    headStyles: { fillColor: NAVY, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 8, textColor: [51, 65, 85] },
+    alternateRowStyles: { fillColor: [241, 245, 249] },
+    margin: { left: M, right: M },
+    theme: 'grid',
+    didParseCell(data) {
+      // Colore a coluna de status conforme a mesma lógica usada nas telas.
+      if (data.section === 'body' && data.column.index === 7) {
+        const label = String(data.cell.raw || '');
+        if (label.includes('vencida')) data.cell.styles.textColor = RED;
+        else if (label.includes('d para PC')) data.cell.styles.textColor = AMBER;
+        else if (label === 'Em execução') data.cell.styles.textColor = GREEN;
+      }
+    },
+  });
+
+  await finalizarComVerificacao(doc, W, M, GRAY, 'Relatório Geral', {
+    quantidadeConvenios: linhas.length,
+    valorTotalGeral: totalGeral,
+    saldoConsolidado: saldoGeral,
+  });
+
+  doc.save('relatorio-geral-convenios.pdf');
+}
 // O arquivo agora é um módulo ES (import/export), então funções não ficam
 // automaticamente disponíveis em window como antes. O HTML é montado via
 // template string com onclick="nomeDaFuncao(...)", então cada função
@@ -4428,7 +4605,7 @@ Object.assign(window, {
   escapeHtml, excluirConvenio, excluirEmenda,
   excluirInstituicao, excluirProponente, excluirResponsavelTecnico, excluirUsuario, exportarAnexosZIP,
   exportarCSVFinanceiro, exportarDados, fecharDocumentoGerado, gerarDocumento,
-  gerarPDFRelatorio, importarDados, lancarExtrato, lancarRendimento,
+  gerarPDFRelatorio, gerarPDFRelatorioGeral, importarDados, lancarExtrato, lancarRendimento,
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
   mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
   registrarPagamento,
