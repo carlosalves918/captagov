@@ -6,6 +6,8 @@ export default function PainelGeral() {
   const { state, tick, novoConvenio, editarConvenio, selecionarConvenio, abrirPrestacaoContas, abrirAditivoDireto, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
   const [termo, setTermo] = useState('');
   const [alertaAberto, setAlertaAberto] = useState(true);
+  const [ordenarPor, setOrdenarPor] = useState('recente');
+  const [ordemDesc, setOrdemDesc] = useState(true);
 
   const convenios = state?.convenios || [];
 
@@ -37,6 +39,26 @@ export default function PainelGeral() {
         (c.conveniente || c.proponente || '').toLowerCase().includes(termoBusca),
     )
     : convenios;
+
+  // Ordenação: "Mais recente" mantém a ordem de cadastro (mais novo primeiro,
+  // igual ao comportamento original). Os demais critérios comparam valores
+  // numéricos e respeitam o botão de direção (maior→menor / menor→maior).
+  const listaOrdenada = useMemo(() => {
+    if (ordenarPor === 'recente') return lista.slice().reverse();
+    const comMetrica = lista.map((c) => {
+      const res = calcularResumoFinanceiro(c.id);
+      let metrica = 0;
+      if (ordenarPor === 'valorTotal') metrica = res ? res.valorTotal : 0;
+      else if (ordenarPor === 'saldo') metrica = res ? res.saldoTotal : 0;
+      else if (ordenarPor === 'repasse') metrica = res ? res.valor : 0;
+      else if (ordenarPor === 'contrapartida') metrica = res ? res.contrapartida : 0;
+      else if (ordenarPor === 'vigencia') metrica = c.dataFim ? new Date(c.dataFim).getTime() : 0;
+      return { c, metrica };
+    });
+    comMetrica.sort((a, b) => (ordemDesc ? b.metrica - a.metrica : a.metrica - b.metrica));
+    return comMetrica.map((x) => x.c);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lista, tick, ordenarPor, ordemDesc]);
 
   return (
     <>
@@ -144,6 +166,30 @@ export default function PainelGeral() {
                 onChange={(e) => setTermo(e.target.value)}
               />
             </div>
+            <select
+              className="form-input form-select"
+              style={{ width: 'auto' }}
+              value={ordenarPor}
+              onChange={(e) => setOrdenarPor(e.target.value)}
+              title="Ordenar convênios por"
+            >
+              <option value="recente">Mais recente</option>
+              <option value="valorTotal">Valor Total</option>
+              <option value="repasse">Repasse</option>
+              <option value="contrapartida">Contrapartida</option>
+              <option value="saldo">Saldo</option>
+              <option value="vigencia">Vigência (data fim)</option>
+            </select>
+            {ordenarPor !== 'recente' && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setOrdemDesc((v) => !v)}
+                title={ordemDesc ? 'Maior para menor' : 'Menor para maior'}
+              >
+                {ordemDesc ? '↓ Maior → Menor' : '↑ Menor → Maior'}
+              </button>
+            )}
             <button type="button" className="btn btn-primary" onClick={() => novoConvenio('convenio')}>
               + Novo Convênio
             </button>
@@ -164,7 +210,7 @@ export default function PainelGeral() {
             </div>
           </div>
         ) : (
-          lista.slice().reverse().map((c) => {
+          listaOrdenada.map((c) => {
             const st = statusConvenio(c);
             const res = calcularResumoFinanceiro(c.id);
             const saldo = res ? formatMoeda(res.saldoTotal) : formatMoeda(0);
