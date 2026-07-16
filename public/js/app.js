@@ -51,6 +51,7 @@ const STATE = {
   docGeradoTexto: null,
   docGeradoEhModelo: false,
   docEditandoId: null,
+  pagamentoDocsAbertoId: null,
 };
 
 // Tipos de emenda parlamentar disponíveis
@@ -1084,7 +1085,23 @@ function togglePagamentoStatus(id) {
 }
 
 // ==================== PAGAMENTOS - CHECKLIST DE DOCUMENTOS ====================
+// Alterna (abre/fecha) o checklist de documentos de um pagamento. Clicar no
+// mesmo pagamento que já está aberto recolhe o painel; clicar em outro troca
+// pra ele. A renderização em si fica em renderPagamentoDocsContainer, que é
+// reaproveitada por anexar/remover pra atualizar sem fechar o painel.
 function togglePagamentoDocs(pagamentoId) {
+  const container = document.getElementById('pagamentoDocsContainer');
+  if (!container) return;
+  if (STATE.pagamentoDocsAbertoId === pagamentoId) {
+    STATE.pagamentoDocsAbertoId = null;
+    container.innerHTML = '';
+    return;
+  }
+  STATE.pagamentoDocsAbertoId = pagamentoId;
+  renderPagamentoDocsContainer(pagamentoId);
+}
+
+function renderPagamentoDocsContainer(pagamentoId) {
   const container = document.getElementById('pagamentoDocsContainer');
   if (!container) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
@@ -1137,14 +1154,14 @@ function anexarDocPagamento(pagamentoId, catId, file) {
     pg.docs[catId].arquivo = file.name;
     pg.docs[catId].arquivoDataUrl = reader.result;
     salvarEstado();
-    togglePagamentoDocs(pagamentoId);
+    renderPagamentoDocsContainer(pagamentoId);
   };
   reader.onerror = function () {
     pg.docs[catId].anexado = true;
     pg.docs[catId].arquivo = file.name;
     pg.docs[catId].arquivoDataUrl = null;
     salvarEstado();
-    togglePagamentoDocs(pagamentoId);
+    renderPagamentoDocsContainer(pagamentoId);
   };
   reader.readAsDataURL(file);
 }
@@ -1159,7 +1176,7 @@ function removerDocPagamento(pagamentoId, catId) {
   if (!confirm('Remover o anexo "' + (cat ? cat.nome : catId) + '" deste pagamento?')) return;
   pg.docs[catId] = { anexado: false, arquivo: null, arquivoDataUrl: null };
   salvarEstado();
-  togglePagamentoDocs(pagamentoId);
+  renderPagamentoDocsContainer(pagamentoId);
 }
 
 // ==================== EXTRATOS ====================
