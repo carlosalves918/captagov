@@ -8,6 +8,7 @@ import {
   gerarId, parseMoeda, formatMoeda, escapeHtml, formatMes, hojeFormatado,
   mascararValor, mascararCNPJ, mascararCPF, mascararCEP,
   calcularPrazoPC, statusConvenio, validarCpfOuCnpj,
+  statusVigencia, formatData, formatValorMasked,
 } from './utils.js';
 import {
   db, carregarEstadoDb, salvarConvenioDb, removerConvenioDb,
@@ -40,6 +41,7 @@ const STATE = {
   convenioInstituicaoIdSelecionada: null,
   convenioProponenteIdSelecionada: null,
   contratadaEditandoId: null,
+  aditivoAbertoCtId: null,
   protocoloSeq: 0,
   view: 'painel',
   subView: 'contratadas',
@@ -58,6 +60,13 @@ const STATE = {
 const TIPOS_EMENDA = ['Pix', 'Transferência Fundo a Fundo', 'Emenda de Bancada', 'Emenda de Comissão', 'Convênio'];
 // Tipos de emenda que exigem vínculo com um Convênio já cadastrado (dados completos do conveniente)
 const TIPOS_EMENDA_COM_CONVENIO = ['Convênio'];
+
+// Tipos de aditivo contratual disponíveis para as contratadas
+const TIPOS_ADITIVO = [
+  { id: 'valor', label: 'De Valor' },
+  { id: 'prazo', label: 'De Prazo' },
+  { id: 'valor_prazo', label: 'De Valor e Prazo' },
+];
 
 // ==================== PERSISTÊNCIA ====================
 // Cada função abaixo grava SÓ o registro que mudou (não mais o estado inteiro).
@@ -133,6 +142,133 @@ function salvarEstado() {
   if (STATE.responsavelTecnicoEditandoId) persistirResponsavelTecnico(STATE.responsavelTecnicoEditandoId);
   if (STATE.usuarioEditandoId) persistirUsuario(STATE.usuarioEditandoId);
   persistirMeta();
+}
+
+// ==================== ADITIVOS DE CONTRATO ====================
+// Garante que uma contratada (mesmo cadastrada antes desta funcionalidade
+// existir) tenha os campos de vigência/aditivos inicializados.
+function garantirCamposAditivo(ct) {
+  if (!ct.aditivos) ct.aditivos = [];
+  if (ct.valorContratoOriginal === undefined || ct.valorContratoOriginal === null) {
+    ct.valorContratoOriginal = ct.valorContrato || '0,00';
+  }
+  if (ct.dataInicioVigencia === undefined) ct.dataInicioVigencia = '';
+  if (ct.dataFimVigenciaOriginal === undefined) ct.dataFimVigenciaOriginal = ct.dataFimVigencia || '';
+  if (ct.dataFimVigencia === undefined) ct.dataFimVigencia = ct.dataFimVigenciaOriginal || '';
+  return ct;
+}
+
+// Recalcula ct.valorContrato (vigente) e ct.dataFimVigencia (vigente) a
+// partir do valor/vigência ORIGINAL do contrato somado ao histórico de
+// aditivos. É chamada sempre que um aditivo é adicionado ou removido, o
+// que torna a remoção segura (basta recalcular do zero) e mantém o valor
+// e a vigência "vigentes" sempre consistentes com o histórico.
+function recalcularContratada(ct) {
+  garantirCamposAditivo(ct);
+  const valorBase = parseMoeda(ct.valorContratoOriginal || '0');
+  const totalAditivadoValor = ct.aditivos
+    .filter(a => a.tipo === 'valor' || a.tipo === 'valor_prazo')
+    .reduce((soma, a) => soma + (Number(a.valorAditivo) || 0), 0);
+  ct.valorContrato = formatValorMasked(valorBase + totalAditivadoValor);
+
+  const aditivosPrazoOrdenados = ct.aditivos
+    .filter(a => (a.tipo === 'prazo' || a.tipo === 'valor_prazo') && a.novaDataFim)
+    .sort((a, b) => (a.criadoEm || 0) - (b.criadoEm || 0));
+  ct.dataFimVigencia = aditivosPrazoOrdenados.length
+    ? aditivosPrazoOrdenados[aditivosPrazoOrdenados.length - 1].novaDataFim
+    : (ct.dataFimVigenciaOriginal || '');
+}
+
+function toggleAditivos(ctId) {
+  STATE.aditivoAbertoCtId = STATE.aditivoAbertoCtId === ctId ? null : ctId;
+  renderFinanceiro();
+}
+
+function atualizarCamposAditivo() {
+  const tipo = document.getElementById('ad_tipo')?.value;
+  const blocoValor = document.getElementById('ad_bloco_valor');
+  const blocoPrazo = document.getElementById('ad_bloco_prazo');
+  if (blocoValor) blocoValor.style.display = (tipo === 'valor' || tipo === 'valor_prazo') ? '' : 'none';
+  if (blocoPrazo) blocoPrazo.style.display = (tipo === 'prazo' || tipo === 'valor_prazo') ? '' : 'none';
+}
+
+async function adicionarAditivo(ctId) {
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const ct = (c.financeiro.contratadas || []).find(x => x.id === ctId);
+  if (!ct) return;
+  garantirCamposAditivo(ct);
+
+  const tipo = document.getElementById('ad_tipo')?.value || 'valor';
+  const numero = document.getElementById('ad_numero')?.value.trim() || '';
+  const dataAssinatura = document.getElementById('ad_data')?.value || '';
+  const justificativa = document.getElementById('ad_justificativa')?.value.trim() || '';
+
+  if (!numero) { toastAviso('Informe o número do aditivo.'); return; }
+  if (!dataAssinatura) { toastAviso('Informe a data de assinatura do aditivo.'); return; }
+
+  let valorAditivo = 0;
+  if (tipo === 'valor' || tipo === 'valor_prazo') {
+    valorAditivo = parseMoeda(document.getElementById('ad_valor')?.value || '0');
+    if (!valorAditivo) { toastAviso('Informe o valor que está sendo aditivado.'); return; }
+  }
+
+  let novaDataFim = '';
+  if (tipo === 'prazo' || tipo === 'valor_prazo') {
+    novaDataFim = document.getElementById('ad_novaDataFim')?.value || '';
+    if (!novaDataFim) { toastAviso('Informe a nova data de vigência.'); return; }
+  }
+
+  const dataFimAnterior = ct.dataFimVigencia || ct.dataFimVigenciaOriginal || '';
+
+  const fileInput = document.getElementById('ad_anexo');
+  const file = fileInput?.files?.[0];
+  let arquivo = null;
+  let arquivoDataUrl = null;
+  if (file) {
+    arquivo = file.name;
+    try {
+      arquivoDataUrl = await lerArquivoComoDataUrl(file);
+    } catch (e) {
+      console.error('Erro ao ler anexo do aditivo:', e);
+    }
+  }
+
+  ct.aditivos.push({
+    id: gerarId('ad'),
+    numero,
+    tipo,
+    dataAssinatura,
+    justificativa,
+    valorAditivo: (tipo === 'valor' || tipo === 'valor_prazo') ? valorAditivo : 0,
+    dataFimAnterior: (tipo === 'prazo' || tipo === 'valor_prazo') ? dataFimAnterior : '',
+    novaDataFim: (tipo === 'prazo' || tipo === 'valor_prazo') ? novaDataFim : '',
+    arquivo,
+    arquivoDataUrl,
+    criadoEm: Date.now(),
+  });
+
+  recalcularContratada(ct);
+  salvarEstado();
+  toastSucesso('Aditivo nº ' + numero + ' registrado — valor/vigência do contrato atualizados.');
+  renderFinanceiro();
+}
+
+function removerAditivo(ctId, aditivoId) {
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const ct = (c.financeiro.contratadas || []).find(x => x.id === ctId);
+  if (!ct) return;
+  garantirCamposAditivo(ct);
+  const ad = ct.aditivos.find(a => a.id === aditivoId);
+  if (!ad) return;
+  if (!confirm('Remover o Aditivo nº ' + (ad.numero || '?') + '? O valor e a vigência do contrato serão recalculados sem ele.')) return;
+  ct.aditivos = ct.aditivos.filter(a => a.id !== aditivoId);
+  recalcularContratada(ct);
+  salvarEstado();
+  renderFinanceiro();
 }
 
 // ==================== CÁLCULO FINANCEIRO ====================
@@ -955,6 +1091,8 @@ function adicionarContratada() {
 
   const numeroContrato = document.getElementById('ct_numero')?.value || '';
   const valorContrato = document.getElementById('ct_valorContrato')?.value || '';
+  const dataInicioVigencia = document.getElementById('ct_dataInicio')?.value || '';
+  const dataFimVigenciaOriginal = document.getElementById('ct_dataFim')?.value || '';
 
   const fileInput = document.getElementById('ct_anexo');
   const fileExtratoInput = document.getElementById('ct_anexo_extrato');
@@ -989,10 +1127,16 @@ function adicionarContratada() {
     if (STATE.contratadaEditandoId) {
       const ct = c.financeiro.contratadas.find(x => x.id === STATE.contratadaEditandoId);
       if (ct) {
+        garantirCamposAditivo(ct);
         ct.razaoSocial = nome;
         ct.cnpj = cnpj;
         ct.numeroContrato = numeroContrato;
-        ct.valorContrato = valorContrato;
+        // O campo do formulário edita o valor/vigência ORIGINAL do contrato;
+        // o valor/vigência VIGENTE é recalculado por cima somando os aditivos.
+        ct.valorContratoOriginal = valorContrato;
+        ct.dataInicioVigencia = dataInicioVigencia;
+        ct.dataFimVigenciaOriginal = dataFimVigenciaOriginal;
+        recalcularContratada(ct);
         if (contratoArquivo) {
           ct.contratoArquivo = contratoArquivo;
           ct.contratoArquivoDataUrl = contratoArquivoDataUrl;
@@ -1010,6 +1154,11 @@ function adicionarContratada() {
         cnpj,
         numeroContrato,
         valorContrato,
+        valorContratoOriginal: valorContrato,
+        dataInicioVigencia,
+        dataFimVigenciaOriginal,
+        dataFimVigencia: dataFimVigenciaOriginal,
+        aditivos: [],
         contratoArquivo,
         contratoArquivoDataUrl,
         extratoArquivo,
@@ -1030,6 +1179,7 @@ function editarContratada(id) {
   if (!c) return;
   const ct = (c.financeiro.contratadas || []).find(x => x.id === id);
   if (!ct) return;
+  garantirCamposAditivo(ct);
   STATE.contratadaEditandoId = id;
   renderFinanceiro();
   // O preenchimento dos campos agora é feito via template string no renderContratadas
@@ -1445,7 +1595,14 @@ function exportarCSVFinanceiro() {
   if (!c) return;
   const fin = c.financeiro;
   const linhas = [['tipo', 'data', 'campo1', 'campo2', 'observação']];
-  (fin.contratadas || []).forEach(ct => linhas.push(['contratada', ct.numeroContrato, ct.valorContrato, '', ct.razaoSocial]));
+  (fin.contratadas || []).forEach(ct => {
+    linhas.push(['contratada', ct.numeroContrato, ct.valorContrato, '', ct.razaoSocial]);
+    (ct.aditivos || []).forEach(a => {
+      const detalhe = (a.tipo === 'valor' || a.tipo === 'valor_prazo') ? 'valor +' + a.valorAditivo : '';
+      const detalhe2 = (a.tipo === 'prazo' || a.tipo === 'valor_prazo') ? ('nova vigência ' + a.novaDataFim) : '';
+      linhas.push(['aditivo', a.dataAssinatura, detalhe, detalhe2, 'Aditivo nº ' + a.numero + ' — ' + ct.razaoSocial + (a.justificativa ? ' — ' + a.justificativa : '')]);
+    });
+  });
   (fin.pagamentos || []).forEach(p => {
     const ct = (fin.contratadas || []).find(x => x.id === p.contratadaId);
     linhas.push(['pagamento', p.data, p.valor, '', 'nº' + p.numero + ' — ' + (ct ? ct.razaoSocial : '?')]);
@@ -2035,14 +2192,26 @@ function renderContratadas(c) {
           <input class="form-input" id="ct_numero" value="${escapeHtml(editando?.numeroContrato || '')}" />
         </div>
         <div class="form-group">
-          <label class="form-label">Valor Contrato</label>
-          <input class="form-input" id="ct_valorContrato" oninput="mascararValor(this)" inputmode="numeric" value="${escapeHtml(editando?.valorContrato || '')}" />
+          <label class="form-label">Valor Contrato${editando && (editando.aditivos || []).some(a => a.tipo !== 'prazo') ? ' (original)' : ''}</label>
+          <input class="form-input" id="ct_valorContrato" oninput="mascararValor(this)" inputmode="numeric" value="${escapeHtml(editando?.valorContratoOriginal ?? editando?.valorContrato ?? '')}" />
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-primary" style="height:42px;" onclick="adicionarContratada()">${editando ? '💾 Salvar' : '+ Adicionar'}</button>
           ${editando ? `<button class="btn btn-secondary" style="height:42px;" onclick="cancelarEdicaoContratada()">Cancelar</button>` : ''}
         </div>
       </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;max-width:800px;">
+        <div class="form-group">
+          <label class="form-label">Início de Execução</label>
+          <input class="form-input" type="date" id="ct_dataInicio" value="${escapeHtml(editando?.dataInicioVigencia || '')}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fim de Vigência${editando && (editando.aditivos || []).some(a => a.tipo !== 'valor') ? ' (original)' : ''}</label>
+          <input class="form-input" type="date" id="ct_dataFim" value="${escapeHtml(editando?.dataFimVigenciaOriginal ?? editando?.dataFimVigencia ?? '')}" />
+        </div>
+      </div>
+      ${editando ? `<div class="card-subtitle" style="margin-top:6px;">Para aditivar valor ou prazo depois de salvo, use o botão <strong>Aditivos</strong> na tabela abaixo — os campos acima guardam sempre os dados <em>originais</em> do contrato.</div>` : ''}
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px;max-width:800px;">
         <div class="form-group">
@@ -2061,14 +2230,25 @@ function renderContratadas(c) {
     ${fin.contratadas && fin.contratadas.length > 0 ? `
       <div class="table-wrapper">
         <table class="table-comfortable">
-          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor</th><th>Anexos</th><th></th></tr></thead>
+          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor Vigente</th><th>Vigência</th><th>Anexos</th><th></th></tr></thead>
           <tbody>
-            ${fin.contratadas.map(ct => `
+            ${fin.contratadas.map(ct => {
+              garantirCamposAditivo(ct);
+              const vig = statusVigencia({ dataFim: ct.dataFimVigencia });
+              const houveAditivoValor = parseMoeda(ct.valorContratoOriginal || '0') !== parseMoeda(ct.valorContrato || '0');
+              return `
               <tr${STATE.contratadaEditandoId === ct.id ? ' style="background:var(--blue-100);"' : ''}>
                 <td><strong>${escapeHtml(ct.razaoSocial)}</strong></td>
                 <td style="white-space:nowrap;">${escapeHtml(ct.cnpj || '—')}</td>
                 <td style="white-space:nowrap;">${escapeHtml(ct.numeroContrato || '—')}</td>
-                <td class="font-mono" style="white-space:nowrap;">${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</td>
+                <td class="font-mono" style="white-space:nowrap;">
+                  ${formatMoeda(parseMoeda(ct.valorContrato || '0'))}
+                  ${houveAditivoValor ? `<div style="font-size:10px;color:var(--gray-500);font-family:inherit;">orig. ${formatMoeda(parseMoeda(ct.valorContratoOriginal || '0'))}</div>` : ''}
+                </td>
+                <td style="white-space:nowrap;">
+                  <span class="badge ${vig.cls}" style="font-size:10.5px;">${vig.label}</span>
+                  ${ct.dataFimVigencia ? `<div style="font-size:10px;color:var(--gray-500);margin-top:2px;">até ${formatData(ct.dataFimVigencia)}</div>` : ''}
+                </td>
                 <td>
                   <div style="display:flex;flex-direction:column;gap:4px;">
                     ${ct.contratoArquivo && ct.contratoArquivoDataUrl
@@ -2082,16 +2262,103 @@ function renderContratadas(c) {
                 </td>
                 <td style="white-space:nowrap;">
                   <div class="td-actions">
+                    <button class="btn btn-ghost btn-sm" onclick="toggleAditivos('${ct.id}')" title="Aditivos de valor/prazo">📑 Aditivos${ct.aditivos.length ? ' (' + ct.aditivos.length + ')' : ''}</button>
                     <button class="btn btn-ghost btn-sm" onclick="editarContratada('${ct.id}')" title="Editar">Editar</button>
                     <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerContratada('${ct.id}')" title="Remover">Remover</button>
                   </div>
                 </td>
               </tr>
-            `).join('')}
+              ${STATE.aditivoAbertoCtId === ct.id ? `
+              <tr>
+                <td colspan="7" style="background:var(--gray-50);padding:0;">
+                  ${renderAditivosPanel(ct)}
+                </td>
+              </tr>` : ''}
+            `;
+            }).join('')}
           </tbody>
         </table>
       </div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhuma contratada cadastrada.</div>'}
+  `;
+}
+
+function renderAditivosPanel(ct) {
+  garantirCamposAditivo(ct);
+  const aditivos = [...ct.aditivos].sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+  return `
+    <div style="padding:16px 20px;border-top:1px solid var(--gray-200);border-bottom:1px solid var(--gray-200);">
+      <div style="font-size:13px;color:var(--navy-900);font-weight:600;margin-bottom:4px;">
+        Aditivos — ${escapeHtml(ct.razaoSocial)} ${ct.numeroContrato ? '· Contrato nº ' + escapeHtml(ct.numeroContrato) : ''}
+      </div>
+      <div class="card-subtitle" style="margin-bottom:14px;">
+        Valor original: <strong>${formatMoeda(parseMoeda(ct.valorContratoOriginal || '0'))}</strong> ·
+        Valor vigente: <strong>${formatMoeda(parseMoeda(ct.valorContrato || '0'))}</strong>
+        &nbsp;|&nbsp;
+        Vigência original: <strong>${ct.dataFimVigenciaOriginal ? formatData(ct.dataFimVigenciaOriginal) : '—'}</strong> ·
+        Vigência atual: <strong>${ct.dataFimVigencia ? formatData(ct.dataFimVigencia) : '—'}</strong>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;">
+        <div class="form-group">
+          <label class="form-label">Tipo de Aditivo</label>
+          <select class="form-input form-select" id="ad_tipo" onchange="atualizarCamposAditivo()">
+            ${TIPOS_ADITIVO.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nº do Aditivo <span class="required">*</span></label>
+          <input class="form-input" id="ad_numero" placeholder="Ex: 1º Aditivo" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data de Assinatura <span class="required">*</span></label>
+          <input class="form-input" type="date" id="ad_data" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Anexo do Aditivo</label>
+          <input class="form-input" type="file" id="ad_anexo" accept=".pdf,.jpg,.jpeg,.png" />
+        </div>
+        <button class="btn btn-primary" style="height:42px;" onclick="adicionarAditivo('${ct.id}')">+ Registrar Aditivo</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;max-width:700px;">
+        <div class="form-group" id="ad_bloco_valor">
+          <label class="form-label">Valor Aditivado (R$) — será somado ao valor vigente</label>
+          <input class="form-input" id="ad_valor" oninput="mascararValor(this)" inputmode="numeric" placeholder="0,00" />
+        </div>
+        <div class="form-group" id="ad_bloco_prazo" style="display:none;">
+          <label class="form-label">Nova Data de Vigência Final — prorroga/posterga o prazo</label>
+          <input class="form-input" type="date" id="ad_novaDataFim" />
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:10px;max-width:700px;">
+        <label class="form-label">Justificativa</label>
+        <input class="form-input" id="ad_justificativa" placeholder="Motivo do aditivo (opcional)" />
+      </div>
+
+      ${aditivos.length > 0 ? `
+        <div class="table-wrapper" style="margin-top:16px;">
+          <table class="table-comfortable">
+            <thead><tr><th>Nº</th><th>Tipo</th><th>Assinatura</th><th>Valor Aditivado</th><th>Nova Vigência</th><th>Anexo</th><th></th></tr></thead>
+            <tbody>
+              ${aditivos.map(a => `
+                <tr>
+                  <td><strong>${escapeHtml(a.numero)}</strong></td>
+                  <td>${escapeHtml((TIPOS_ADITIVO.find(t => t.id === a.tipo) || {}).label || a.tipo)}</td>
+                  <td style="white-space:nowrap;">${a.dataAssinatura ? formatData(a.dataAssinatura) : '—'}</td>
+                  <td class="font-mono">${(a.tipo === 'valor' || a.tipo === 'valor_prazo') ? '+ ' + formatMoeda(a.valorAditivo) : '—'}</td>
+                  <td style="white-space:nowrap;">${(a.tipo === 'prazo' || a.tipo === 'valor_prazo') ? formatData(a.novaDataFim) + (a.dataFimAnterior ? ` <span style="color:var(--gray-400);">(era ${formatData(a.dataFimAnterior)})</span>` : '') : '—'}</td>
+                  <td>${a.arquivo && a.arquivoDataUrl
+                    ? `<a href="${a.arquivoDataUrl}" download="${escapeHtml(a.arquivo)}" class="btn btn-ghost btn-sm td-truncate" title="${escapeHtml(a.arquivo)}">📎</a>`
+                    : '<span style="font-size:10px;color:var(--gray-400);">—</span>'}</td>
+                  <td><button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerAditivo('${ct.id}','${a.id}')">Remover</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '<div class="empty-state text-sm" style="padding:16px 0;">Nenhum aditivo registrado para este contrato ainda.</div>'}
+    </div>
   `;
 }
 
@@ -3329,8 +3596,12 @@ function gerarPDFRelatorio() {
     y += 6;
 
     doc.autoTable({
-      head: [['Razão Social', 'CNPJ', 'Nº Contrato', 'Valor Contrato']],
-      body: fin.contratadas.map(ct => [ct.razaoSocial || '—', ct.cnpj || '—', ct.numeroContrato || '—', formatMoeda(parseMoeda(ct.valorContrato || '0'))]),
+      head: [['Razão Social', 'CNPJ', 'Nº Contrato', 'Valor Vigente', 'Vigência Final']],
+      body: fin.contratadas.map(ct => [
+        ct.razaoSocial || '—', ct.cnpj || '—', ct.numeroContrato || '—',
+        formatMoeda(parseMoeda(ct.valorContrato || '0')),
+        ct.dataFimVigencia ? formatData(ct.dataFimVigencia) : '—',
+      ]),
       startY: y,
       headStyles: { fillColor: TEAL, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
       bodyStyles: { fontSize: 9, textColor: [51, 65, 85] },
@@ -3339,6 +3610,36 @@ function gerarPDFRelatorio() {
       theme: 'grid',
     });
     y = doc.lastAutoTable.finalY + 10;
+
+    // Aditivos (histórico de alterações de valor/prazo por contratada)
+    const todosAditivos = [];
+    fin.contratadas.forEach(ct => (ct.aditivos || []).forEach(a => todosAditivos.push({ ct, a })));
+    if (todosAditivos.length > 0) {
+      if (y > 240) { doc.addPage(); y = 20; }
+      doc.setTextColor(...NAVY);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Aditivos Contratuais', M, y);
+      y += 6;
+      doc.autoTable({
+        head: [['Contratada', 'Aditivo', 'Tipo', 'Assinatura', 'Valor Aditivado', 'Nova Vigência']],
+        body: todosAditivos.map(({ ct, a }) => [
+          ct.razaoSocial || '—',
+          a.numero || '—',
+          (TIPOS_ADITIVO.find(t => t.id === a.tipo) || {}).label || a.tipo,
+          a.dataAssinatura ? formatData(a.dataAssinatura) : '—',
+          (a.tipo === 'valor' || a.tipo === 'valor_prazo') ? formatMoeda(a.valorAditivo) : '—',
+          (a.tipo === 'prazo' || a.tipo === 'valor_prazo') ? formatData(a.novaDataFim) : '—',
+        ]),
+        startY: y,
+        headStyles: { fillColor: TEAL, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+        bodyStyles: { fontSize: 9, textColor: [51, 65, 85] },
+        alternateRowStyles: { fillColor: [241, 245, 249] },
+        margin: { left: M, right: M },
+        theme: 'grid',
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    }
   }
 
   // Pagamentos
@@ -3468,8 +3769,8 @@ function gerarPDFRelatorio() {
 // template string com onclick="nomeDaFuncao(...)", então cada função
 // chamada dessa forma precisa ser atribuída a window explicitamente.
 Object.assign(window, {
-  abrirPrestacaoContas, abrirTelaBackups, adicionarContratada, adicionarDocExtra, anexarDocExtra,
-  anexarDocPagamento, aprovarDocumentoSalvo, baixarDocumentoGerado, baixarDocumentoSalvo, cancelarEdicaoContratada,
+  abrirPrestacaoContas, abrirTelaBackups, adicionarAditivo, adicionarContratada, adicionarDocExtra, anexarDocExtra,
+  anexarDocPagamento, aprovarDocumentoSalvo, atualizarCamposAditivo, baixarDocumentoGerado, baixarDocumentoSalvo, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
   editarDocumentoSalvo, editarEmenda, editarInstituicao, editarProponente, editarResponsavelTecnico, editarUsuario,
   escapeHtml, excluirConvenio, excluirEmenda,
@@ -3479,12 +3780,12 @@ Object.assign(window, {
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
   mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
   registrarPagamento,
-  removerAnexoExtrato, removerAnexoRendimento, removerContratada,
+  removerAditivo, removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerDocumentoSalvo, removerExtrato, removerPagamento,
   removerRendimento, renderTudo, renderBody, restaurarSnapshotAuto, excluirSnapshotAuto,
   reverterDocumentoSalvo, salvarConvenio, salvarDocumentoGerado, salvarEmenda, salvarInstituicao, salvarProponente,
   salvarResponsavelTecnico, salvarUsuario,
-  toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
+  toggleAditivos, toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
   // Expostos para a ponte React (ver contexts/AppContext.jsx) — telas ainda não
   // migradas continuam usando essas funções por baixo dos panos.

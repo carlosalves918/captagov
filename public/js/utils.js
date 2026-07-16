@@ -31,6 +31,17 @@ export function hojeFormatado() {
   return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
+// Reformata um número (float) no mesmo padrão de string usado pelos campos
+// mascarados por mascararValor (ex: 1234.5 -> "1.234,50"). Usado para
+// recalcular ct.valorContrato depois de aplicar aditivos de valor.
+export function formatValorMasked(v) {
+  const num = Math.max(0, Number(v) || 0);
+  const fixed = num.toFixed(2);
+  const [intPart, centPart] = fixed.split('.');
+  const comSeparador = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return comSeparador + ',' + centPart;
+}
+
 // ==================== MÁSCARAS ====================
 export function mascararValor(e) {
   let d = e.value.replace(/\D/g, '');
