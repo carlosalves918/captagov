@@ -32,6 +32,10 @@ export default function Document() {
           src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"
           strategy="beforeInteractive"
         />
+        <Script
+          src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"
+          strategy="beforeInteractive"
+        />
       </body>
     </Html>
   );

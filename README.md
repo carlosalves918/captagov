@@ -10,7 +10,8 @@ Plataforma de gestão de convênios e projetos para a administração pública m
 - Cadastro completo de convênios e projetos, com validação de CNPJ/CPF (dígito verificador)
 - Controle financeiro (extratos, rendimentos, pagamentos)
 - Prestação de contas com checklist documental
-- Relatórios financeiros em PDF profissional
+- Relatórios financeiros em PDF profissional, com resumo executivo (status, % executado, alertas de prazo), gráfico de evolução mensal, sumário com paginação, código de verificação (hash) e QR code de conferência
+- Relatório geral consolidado (portfólio de todos os convênios) em PDF
 - Módulo de emendas parlamentares
 - Geração de documentos preenchidos automaticamente com os dados do convênio (Ofício, Memorando, Justificativa Técnica) — 100% offline, sem IA. Para os documentos que exigem análise técnica (DFD, ETP, Termo de Referência, Projeto Básico, Matriz de Risco, Plano de Ação), a ferramenta entrega um modelo estruturado para preenchimento manual, não um texto pronto.
 - Backup e importação de dados (JSON)
@@ -46,6 +47,7 @@ npm test
 | Dexie.js | 3.2 | IndexedDB (dados locais, tabelas separadas por entidade) |
 | jsPDF | 2.5 | Relatórios em PDF |
 | jsPDF-autoTable | 3.8 | Tabelas no PDF |
+| qrcode | 1.5 | QR code de verificação nos relatórios PDF |
 
 ## Arquitetura
 

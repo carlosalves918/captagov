@@ -3940,8 +3940,10 @@ async function gerarCodigoVerificacao(payload) {
 }
 
 // Desenha o rodapé (paginação + emissor + código de verificação) em todas as
-// páginas do documento. Chamada por último, quando o total de páginas e o
-// conteúdo já estão fechados, para o hash refletir o documento final.
+// páginas do documento, e um QR code na última página para conferência
+// rápida (ex: por um auditor com o celular em mãos). Chamada por último,
+// quando o total de páginas e o conteúdo já estão fechados, para o hash
+// refletir o documento final.
 async function finalizarComVerificacao(doc, W, M, GRAY, tituloDoc, payloadExtra) {
   const usuarioEmissor = STATE.usuarios.find(u => u.id === STATE.usuarioSelecionadoId);
   const agora = new Date();
@@ -3951,6 +3953,23 @@ async function finalizarComVerificacao(doc, W, M, GRAY, tituloDoc, payloadExtra)
     emissor: usuarioEmissor ? usuarioEmissor.nome : null,
     ...payloadExtra,
   });
+
+  // QR code com o texto de conferência — só na última página, pra não
+  // poluir um relatório de várias páginas repetindo a mesma imagem.
+  let qrDataUrl = null;
+  if (codigo && window.QRCode && typeof window.QRCode.toDataURL === 'function') {
+    try {
+      const iv = STATE.identidadeVisual || {};
+      const textoQr = [
+        (iv.nomeMunicipio || 'CaptaGov') + ' — ' + tituloDoc,
+        'Código: ' + codigo,
+        'Emitido em: ' + agora.toLocaleDateString('pt-BR') + ' ' + agora.toLocaleTimeString('pt-BR'),
+        usuarioEmissor ? 'Por: ' + usuarioEmissor.nome : null,
+      ].filter(Boolean).join('\n');
+      qrDataUrl = await window.QRCode.toDataURL(textoQr, { margin: 1, width: 160 });
+    } catch (e) { /* lib indisponível ou falhou — segue só com o código em texto */ }
+  }
+
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -3963,6 +3982,11 @@ async function finalizarComVerificacao(doc, W, M, GRAY, tituloDoc, payloadExtra)
     }
     if (codigo) {
       doc.text('Código de verificação: ' + codigo, W - M, 294, { align: 'right' });
+    }
+    if (qrDataUrl && i === totalPages) {
+      try {
+        doc.addImage(qrDataUrl, 'PNG', W - M - 16, 271, 16, 16);
+      } catch (e) { /* formato de imagem incompatível nesse navegador — segue sem QR */ }
     }
   }
   return codigo;
