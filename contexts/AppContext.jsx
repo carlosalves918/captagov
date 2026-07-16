@@ -61,9 +61,15 @@ export function AppProvider({ children }) {
     exportarDados: call('exportarDados'),
     importarDados: call('importarDados'),
     renderBody: call('renderBody'),
+    fazerLogin: call('fazerLogin'),
+    fazerLogout: call('fazerLogout'),
     // Funções puras de leitura (também expostas em window para as telas legadas)
     calcularResumoFinanceiro: call('calcularResumoFinanceiro'),
     statusConvenio: call('statusConvenio'),
+    algumUsuarioTemSenha: call('algumUsuarioTemSenha'),
+    usuarioAtual: call('usuarioAtual'),
+    papelAtual: call('papelAtual'),
+    podeAdministrar: call('podeAdministrar'),
   }), [call]);
 
   const value = useMemo(() => ({

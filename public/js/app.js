@@ -31,6 +31,7 @@ const STATE = {
   usuarios: [],
   backupsAutoLista: [],
   identidadeVisual: { nomeMunicipio: '', brasaoDataUrl: null },
+  usuarioLogadoId: null,
   convenioAtualId: null,
   convenioEditandoId: null,
   emendaEditandoId: null,
@@ -225,6 +226,7 @@ function atualizarCamposAditivo() {
 }
 
 async function adicionarAditivo(ctId) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -291,6 +293,7 @@ async function adicionarAditivo(ctId) {
 }
 
 function removerAditivo(ctId, aditivoId) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -351,6 +354,11 @@ async function carregarEstado() {
 
 // ==================== NAVEGAÇÃO ====================
 function mudarView(view) {
+  const somenteAdmin = ['usuarios', 'identidadeVisual', 'backups'];
+  if (somenteAdmin.includes(view) && !podeAdministrar()) {
+    toastAviso('Essa área é restrita a administradores.');
+    return;
+  }
   STATE.view = view;
   if (view === 'prestacao') STATE.subView = 'contratadas';
   else if (view === 'documentos') STATE.docSubView = 'ia';
@@ -473,6 +481,7 @@ function editarConvenio(id) {
 }
 
 function salvarConvenio() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const form = getFormData();
   const obrigatorios = STATE.tipoInstrumento === 'projeto' ? obrigatoriosProjeto : obrigatoriosConvenio;
   const faltando = obrigatorios.filter(id => !form[id] || !form[id].trim());
@@ -548,6 +557,7 @@ function salvarConvenio() {
 }
 
 function excluirConvenio(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const c = STATE.convenios.find(x => x.id === id);
   if (!c) return;
   if (!confirm('Excluir o convênio "' + (c.numero || 'sem número') + '"? Esta ação não pode ser desfeita.')) return;
@@ -621,6 +631,7 @@ function editarEmenda(id) {
 }
 
 function salvarEmenda() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const parlamentar = (document.getElementById('em_parlamentar')?.value || '').trim();
   const numero = (document.getElementById('em_numero')?.value || '').trim();
   const valor = (document.getElementById('em_valor')?.value || '').trim();
@@ -669,6 +680,7 @@ function salvarEmenda() {
 }
 
 function excluirEmenda(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const e = STATE.emendas.find(x => x.id === id);
   if (!e) return;
   if (!confirm('Excluir a emenda de ' + (e.parlamentar || '?') + '?')) return;
@@ -704,6 +716,7 @@ function editarInstituicao(id) {
 }
 
 function salvarInstituicao() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const nota = document.getElementById('instituicaoNote');
   const razaoSocial = (document.getElementById('in_razaoSocial')?.value || '').trim();
   const cnpj = (document.getElementById('in_cnpj')?.value || '').trim();
@@ -753,6 +766,7 @@ function salvarInstituicao() {
 }
 
 function excluirInstituicao(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const i = STATE.instituicoes.find(x => x.id === id);
   if (!i) return;
   if (!confirm('Excluir a instituição "' + (i.razaoSocial || '?') + '"?')) return;
@@ -792,6 +806,7 @@ function editarProponente(id) {
 }
 
 function salvarProponente() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const nota = document.getElementById('proponenteNote');
   const razaoSocial = (document.getElementById('pp_razaoSocial')?.value || '').trim();
   const documento = (document.getElementById('pp_documento')?.value || '').trim();
@@ -843,6 +858,7 @@ function salvarProponente() {
 }
 
 function excluirProponente(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const p = STATE.proponentes.find(x => x.id === id);
   if (!p) return;
   if (!confirm('Excluir o proponente "' + (p.razaoSocial || '?') + '"?')) return;
@@ -895,6 +911,7 @@ async function verificarBackupAutomatico() {
 }
 
 async function abrirTelaBackups() {
+  if (!podeAdministrar()) { toastAviso('Essa área é restrita a administradores.'); return; }
   try {
     STATE.backupsAutoLista = await listarSnapshotsAutoDb();
   } catch (e) {
@@ -906,6 +923,7 @@ async function abrirTelaBackups() {
 }
 
 async function restaurarSnapshotAuto(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!confirm('Restaurar este backup automático? Isso substitui TODOS os dados atuais (convênios, emendas, instituições, proponentes) pelo conteúdo salvo nesse ponto no tempo.')) return;
   try {
     const snap = await buscarSnapshotAutoDb(id);
@@ -937,6 +955,7 @@ async function restaurarSnapshotAuto(id) {
 }
 
 async function excluirSnapshotAuto(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!confirm('Excluir este backup automático da lista?')) return;
   try {
     await removerSnapshotAutoDb(id);
@@ -1004,6 +1023,7 @@ function editarResponsavelTecnico(id) {
 }
 
 function salvarResponsavelTecnico() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const nota = document.getElementById('responsavelTecnicoNote');
   const nome = (document.getElementById('rt_nome')?.value || '').trim();
   const cpf = (document.getElementById('rt_cpf')?.value || '').trim();
@@ -1047,6 +1067,7 @@ function salvarResponsavelTecnico() {
 }
 
 function excluirResponsavelTecnico(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const r = STATE.responsaveisTecnicos.find(x => x.id === id);
   if (!r) return;
   if (!confirm('Excluir o responsável técnico "' + (r.nome || '?') + '"?')) return;
@@ -1057,6 +1078,82 @@ function excluirResponsavelTecnico(id) {
     limparFormResponsavelTecnico();
   }
   renderTudo();
+}
+
+// ==================== AUTENTICAÇÃO LOCAL (ETAPA 1) ====================
+// Login simples, guardado só no navegador (mesma base local de tudo o
+// resto do app) — controla quem usa o computador compartilhado e atribui
+// autoria às ações, mas NÃO é segurança de servidor: quem tiver acesso ao
+// navegador ainda enxerga os dados pelo DevTools. Uma etapa futura com
+// backend real (ex. Supabase) é quem vai resolver isso de vez — ver README.
+const CHAVE_SESSAO = 'captagov_sessao_usuario';
+const PAPEIS = { ADMIN: 'admin', OPERADOR: 'operador', LEITURA: 'leitura' };
+const PAPEL_LABEL = { admin: 'Administrador', operador: 'Operador', leitura: 'Somente leitura' };
+
+async function hashSenha(texto) {
+  const dados = new TextEncoder().encode(texto || '');
+  const buffer = await crypto.subtle.digest('SHA-256', dados);
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Se ninguém tiver senha cadastrada, o app funciona igual antes (sem tela de
+// login) — assim quem já usa o CaptaGov não é pego de surpresa.
+function algumUsuarioTemSenha() {
+  return STATE.usuarios.some(u => !!u.senhaHash);
+}
+
+function usuarioAtual() {
+  return STATE.usuarios.find(u => u.id === STATE.usuarioLogadoId) || null;
+}
+
+// Sem sistema de login ativado (ninguém com senha), trata como admin —
+// mantém todo o comportamento de hoje. Com login ativado e ninguém logado,
+// não tem papel nenhum (a tela de login barra antes disso importar).
+function papelAtual() {
+  if (!algumUsuarioTemSenha()) return PAPEIS.ADMIN;
+  return usuarioAtual()?.papel || null;
+}
+
+function podeAdministrar() {
+  return papelAtual() === PAPEIS.ADMIN;
+}
+
+function podeEditar() {
+  return papelAtual() !== PAPEIS.LEITURA;
+}
+
+function bloqueadoSomenteLeitura() {
+  toastAviso('Seu perfil é "Somente leitura" — peça a um administrador ou operador para fazer essa alteração.');
+}
+
+async function fazerLogin(usuarioId, senhaTexto) {
+  const u = STATE.usuarios.find(x => x.id === usuarioId);
+  if (!u || !u.senhaHash) { toastErro('Usuário inválido.'); return false; }
+  const hash = await hashSenha(senhaTexto);
+  if (hash !== u.senhaHash) { toastErro('Senha incorreta.'); return false; }
+  STATE.usuarioLogadoId = u.id;
+  STATE.usuarioSelecionadoId = u.id; // já deixa pré-selecionado em Documentos/Relatórios
+  try { sessionStorage.setItem(CHAVE_SESSAO, u.id); } catch (e) { /* navegador sem sessionStorage (modo privado restrito) — segue só na memória */ }
+  toastSucesso('Bem-vindo(a), ' + (u.nome || 'usuário') + '!');
+  renderTudo();
+  return true;
+}
+
+function fazerLogout() {
+  STATE.usuarioLogadoId = null;
+  try { sessionStorage.removeItem(CHAVE_SESSAO); } catch (e) { /* ignora */ }
+  renderTudo();
+}
+
+// Roda na inicialização: se já havia sessão nesta aba (recarregou a página),
+// reloga automaticamente — sem pedir senha de novo a cada F5.
+function restaurarSessao() {
+  try {
+    const id = sessionStorage.getItem(CHAVE_SESSAO);
+    if (id && STATE.usuarios.some(u => u.id === id && u.senhaHash)) {
+      STATE.usuarioLogadoId = id;
+    }
+  } catch (e) { /* ignora */ }
 }
 
 // ==================== CRUD USUÁRIOS ====================
@@ -1079,16 +1176,23 @@ function editarUsuario(id) {
       const el = document.getElementById(k);
       if (el) el.value = u[k.replace('us_', '')] || '';
     });
+    const papelEl = document.getElementById('us_papel');
+    if (papelEl) papelEl.value = u.papel || PAPEIS.OPERADOR;
   });
 }
 
-function salvarUsuario() {
+async function salvarUsuario() {
   const nota = document.getElementById('usuarioNote');
   const nome = (document.getElementById('us_nome')?.value || '').trim();
   if (!nome) {
     nota.innerHTML = '<div class="alert alert-warning">Informe o nome do usuário.</div>';
     return;
   }
+
+  const senhaEl = document.getElementById('us_senha');
+  const senhaTexto = senhaEl ? senhaEl.value : '';
+  const limparSenha = !!document.getElementById('us_limpar_senha')?.checked;
+  const papelEl = document.getElementById('us_papel');
 
   const dados = {
     nome,
@@ -1097,15 +1201,28 @@ function salvarUsuario() {
     email: document.getElementById('us_email')?.value || '',
     telefone: document.getElementById('us_telefone')?.value || '',
     obs: document.getElementById('us_obs')?.value || '',
+    papel: papelEl?.value || PAPEIS.OPERADOR,
   };
 
   let idPersistir;
+  let senhaHashAnterior = null;
   if (STATE.usuarioEditandoId) {
     const idx = STATE.usuarios.findIndex(u => u.id === STATE.usuarioEditandoId);
+    if (idx > -1) senhaHashAnterior = STATE.usuarios[idx].senhaHash || null;
+    if (limparSenha) {
+      dados.senhaHash = null;
+    } else if (senhaTexto) {
+      dados.senhaHash = await hashSenha(senhaTexto);
+    } else {
+      dados.senhaHash = senhaHashAnterior;
+    }
     if (idx > -1) STATE.usuarios[idx] = { id: STATE.usuarioEditandoId, ...dados };
     idPersistir = STATE.usuarioEditandoId;
+    // Se o usuário logado limpou a própria senha, desloga na hora.
+    if (limparSenha && STATE.usuarioLogadoId === idPersistir) fazerLogout();
   } else {
     idPersistir = gerarId('us');
+    if (senhaTexto) dados.senhaHash = await hashSenha(senhaTexto);
     STATE.usuarios.push({ id: idPersistir, ...dados });
   }
 
@@ -1126,11 +1243,13 @@ function excluirUsuario(id) {
     STATE.usuarioEditandoId = null;
     limparFormUsuario();
   }
+  if (STATE.usuarioLogadoId === id) { fazerLogout(); return; }
   renderTudo();
 }
 
 // ==================== FINANCEIRO ====================
 function adicionarContratada() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -1243,6 +1362,7 @@ function cancelarEdicaoContratada() {
 }
 
 async function registrarPagamento() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -1279,6 +1399,7 @@ async function registrarPagamento() {
 
 // ==================== PAGAMENTOS - ANEXOS ====================
 function togglePagamentoStatus(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -1404,6 +1525,7 @@ function lerArquivoComoDataUrl(file) {
 
 // ==================== EXTRATOS ====================
 async function lancarExtrato() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -1429,6 +1551,7 @@ async function lancarExtrato() {
 }
 
 async function lancarRendimento() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -1792,6 +1915,7 @@ async function exportarAnexosZIP() {
 
 // ==================== IMPORTAR DADOS ====================
 function importarDados(file) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async function () {
@@ -2666,6 +2790,7 @@ function renderGestaoDocumentos() {
 // por uma chamada real à API da Anthropic (ver STUB abaixo) sem mudar o
 // resto do fluxo: geração -> revisão -> salvar -> editar/aprovar/remover.
 function gerarDocumento(tipoId) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
   const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
@@ -2731,6 +2856,7 @@ function baixarTextoComoArquivo(texto, nomeBase) {
 // permanente de documentos do convênio — a partir daqui ele passa a ter um
 // histórico e pode ser reaberto, aprovado ou removido depois.
 function salvarDocumentoGerado() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
   const el = document.getElementById('docGeradoTexto');
@@ -2779,6 +2905,7 @@ function editarDocumentoSalvo(id) {
 }
 
 function aprovarDocumentoSalvo(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c || !c.docsGeradosIA) return;
   const doc = c.docsGeradosIA.find(d => d.id === id);
@@ -2791,6 +2918,7 @@ function aprovarDocumentoSalvo(id) {
 }
 
 function reverterDocumentoSalvo(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c || !c.docsGeradosIA) return;
   const doc = c.docsGeradosIA.find(d => d.id === id);
@@ -2810,6 +2938,7 @@ function baixarDocumentoSalvo(id) {
 }
 
 function removerDocumentoSalvo(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c || !c.docsGeradosIA) return;
   const doc = c.docsGeradosIA.find(d => d.id === id);
@@ -3504,7 +3633,7 @@ function renderUsuarioLista() {
       </div>
     </div>
     <div class="alert alert-info" style="margin-bottom:16px;">
-      Este cadastro é só um registro de pessoas pra identificar quem elaborou/assina os documentos — não é login nem controla acesso ao sistema.
+      Além de identificar quem elabora/assina os documentos, um usuário com senha cadastrada pode fazer login no sistema — o papel dele (Administrador/Operador/Somente leitura) controla o que ele pode ver e alterar. É um controle local, pra uso em computador compartilhado — não substitui um backend com autenticação de servidor.
     </div>
     ${lista.length === 0
     ? '<div class="empty-state"><div class="empty-state-icon">👤</div><div class="empty-state-title">Nenhum usuário cadastrado</div></div>'
@@ -3515,6 +3644,8 @@ function renderUsuarioLista() {
             <div class="convenio-card-sub">${u.cargo ? escapeHtml(u.cargo) : 'Cargo não informado'}${u.setor ? ' · ' + escapeHtml(u.setor) : ''}${u.email ? ' · ' + escapeHtml(u.email) : ''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:12px;">
+            <span class="badge ${u.papel === PAPEIS.ADMIN ? 'badge-ok' : u.papel === PAPEIS.LEITURA ? 'badge-info' : 'badge-warn'}">${escapeHtml(PAPEL_LABEL[u.papel] || 'Operador')}</span>
+            <span style="font-size:12px;color:${u.senhaHash ? 'var(--green-600)' : 'var(--gray-400)'};">${u.senhaHash ? '🔒 Login ativo' : '— sem login'}</span>
             <button class="btn btn-ghost btn-sm" onclick="editarUsuario('${u.id}')">Editar</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="excluirUsuario('${u.id}')">🗑</button>
           </div>
@@ -3524,6 +3655,8 @@ function renderUsuarioLista() {
 }
 
 function renderUsuarioForm() {
+  const editando = STATE.usuarioEditandoId ? STATE.usuarios.find(x => x.id === STATE.usuarioEditandoId) : null;
+  const temSenha = !!(editando && editando.senhaHash);
   return `
     <div class="card-title" style="font-size:16px;">${STATE.usuarioEditandoId ? 'Editar' : 'Novo'} Usuário</div>
     <div id="usuarioNote"></div>
@@ -3534,6 +3667,28 @@ function renderUsuarioForm() {
       <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="us_email" type="email" /></div>
       <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="us_telefone" /></div>
       <div class="form-group full-width"><label class="form-label">Observações</label><input class="form-input" id="us_obs" /></div>
+
+      <div class="form-section-title">🔐 Acesso ao sistema</div>
+      <div class="form-group">
+        <label class="form-label">Papel</label>
+        <select class="form-input form-select" id="us_papel">
+          <option value="${PAPEIS.ADMIN}">Administrador — acesso total</option>
+          <option value="${PAPEIS.OPERADOR}" selected>Operador — usa o dia a dia, sem acesso a Usuários/Identidade Visual/Backups</option>
+          <option value="${PAPEIS.LEITURA}">Somente leitura — não pode salvar, lançar ou excluir nada</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${temSenha ? 'Nova senha (deixe em branco pra manter a atual)' : 'Senha (opcional — sem senha, este usuário não consegue fazer login)'}</label>
+        <input class="form-input" type="password" id="us_senha" autocomplete="new-password" placeholder="${temSenha ? '••••••' : 'Deixe em branco = sem login'}" />
+      </div>
+      ${temSenha ? `
+      <div class="form-group full-width">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--gray-600);cursor:pointer;">
+          <input type="checkbox" id="us_limpar_senha" style="width:auto;" />
+          Remover a senha deste usuário (ele deixa de conseguir fazer login)
+        </label>
+      </div>
+      ` : ''}
     </div>
     <div style="margin-top:16px;display:flex;gap:12px;">
       <button class="btn btn-primary btn-lg" onclick="salvarUsuario()">💾 Salvar Usuário</button>
@@ -3543,8 +3698,12 @@ function renderUsuarioForm() {
 }
 
 function limparFormUsuario() {
-  ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs']
+  ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs', 'us_senha']
     .forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
+  const papelEl = document.getElementById('us_papel');
+  if (papelEl) papelEl.value = PAPEIS.OPERADOR;
+  const limparEl = document.getElementById('us_limpar_senha');
+  if (limparEl) limparEl.checked = false;
   const nota = document.getElementById('usuarioNote');
   if (nota) nota.innerHTML = '';
 }
@@ -3642,6 +3801,7 @@ function limparFormConvenio() {
 
 // ==================== REMOÇÕES ====================
 function removerContratada(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -3653,6 +3813,7 @@ function removerContratada(id) {
 }
 
 function removerPagamento(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -3663,6 +3824,7 @@ function removerPagamento(id) {
 }
 
 function removerExtrato(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -3673,6 +3835,7 @@ function removerExtrato(id) {
 }
 
 function removerRendimento(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) return;
@@ -4104,6 +4267,7 @@ Object.assign(window, {
   // Expostos para a ponte React (ver contexts/AppContext.jsx) — telas ainda não
   // migradas continuam usando essas funções por baixo dos panos.
   STATE, calcularResumoFinanceiro, statusConvenio,
+  fazerLogin, fazerLogout, algumUsuarioTemSenha, usuarioAtual, papelAtual, podeAdministrar, PAPEL_LABEL,
 });
 
 // Avisa a ponte React (se já estiver montada) que window.STATE já existe,
@@ -4114,6 +4278,7 @@ window.dispatchEvent(new CustomEvent('captagov:changed'));
 (async function iniciar() {
   try {
     await carregarEstado(); // já cuida de migrar dados de versões antigas, se existirem
+    restaurarSessao(); // relogin automático se já havia sessão ativa nesta aba
   } catch (e) {
     console.error('Erro ao carregar dados salvos:', e);
     toastErro('Não consegui carregar os dados salvos localmente. Veja o console para detalhes.');

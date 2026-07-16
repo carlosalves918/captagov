@@ -35,8 +35,12 @@ const GRUPOS = [
 ];
 
 export default function Sidebar({ onNavigate }) {
-  const { state, mudarView, exportarDados, importarDados, abrirTelaBackups } = useApp();
+  const { state, mudarView, exportarDados, importarDados, abrirTelaBackups, papelAtual, usuarioAtual, algumUsuarioTemSenha, fazerLogout } = useApp();
   const viewAtual = state?.view;
+  const ehAdmin = papelAtual() === 'admin';
+  const loginAtivo = algumUsuarioTemSenha();
+  const logado = usuarioAtual();
+  const PAPEL_LABEL = { admin: 'Administrador', operador: 'Operador', leitura: 'Somente leitura' };
   const ehProjetoAtual = (() => {
     const atual = state?.convenios?.find((x) => x.id === state.convenioAtualId);
     return !!(atual && atual.tipo === 'projeto');
@@ -56,9 +60,11 @@ export default function Sidebar({ onNavigate }) {
       </div>
       <nav className="sidebar-nav">
         {GRUPOS.map((grupo, idx) => {
-          const itensVisiveis = grupo.itens.filter(
-            (item) => !(item.id === 'prestacao' && ehProjetoAtual)
-          );
+          const itensVisiveis = grupo.itens.filter((item) => {
+            if (item.id === 'prestacao' && ehProjetoAtual) return false;
+            if ((item.id === 'usuarios' || item.id === 'identidadeVisual') && loginAtivo && !ehAdmin) return false;
+            return true;
+          });
           if (itensVisiveis.length === 0) return null;
           return (
             <div key={grupo.titulo || `grupo-${idx}`} className="sidebar-nav-group">
@@ -84,6 +90,24 @@ export default function Sidebar({ onNavigate }) {
         })}
       </nav>
       <div className="sidebar-footer">
+        {loginAtivo && logado && (
+          <div className="sidebar-user">
+            <div className="sidebar-user-info">
+              <div className="sidebar-user-name">{logado.nome}</div>
+              <div className="sidebar-user-papel">{PAPEL_LABEL[logado.papel] || 'Operador'}</div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ color: 'var(--white)', flexShrink: 0 }}
+              onClick={() => fazerLogout()}
+              title="Sair"
+            >
+              Sair
+            </button>
+          </div>
+        )}
+        {ehAdmin && (
         <div style={{ marginBottom: 8 }}>
           <button
             type="button"
@@ -114,6 +138,7 @@ export default function Sidebar({ onNavigate }) {
             🕐 Backups Automáticos
           </button>
         </div>
+        )}
         <div>CaptaGov v3 — Dados locais</div>
       </div>
     </>

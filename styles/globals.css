@@ -1260,3 +1260,83 @@ tbody tr:last-child td {
     border: 1px solid #ddd !important;
   }
 }
+
+/* — Tela de Login — */
+.login-screen {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, var(--navy-900) 0%, #142443 60%, var(--navy-900) 100%);
+  padding: 24px;
+}
+
+.login-card {
+  background: var(--white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 380px;
+  text-align: center;
+}
+
+.login-logo {
+  height: 44px;
+  margin-bottom: 16px;
+}
+
+.login-title {
+  font-family: 'Source Serif 4', serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--navy-900);
+}
+
+.login-subtitle {
+  font-size: 13.5px;
+  color: var(--gray-500);
+  margin-top: 6px;
+}
+
+.login-card .form-group {
+  text-align: left;
+}
+
+.login-footnote {
+  margin-top: 22px;
+  font-size: 11.5px;
+  color: var(--gray-400);
+  line-height: 1.5;
+}
+
+/* — Usuário logado (rodapé da sidebar) — */
+.sidebar-user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+
+.sidebar-user-info {
+  min-width: 0;
+}
+
+.sidebar-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-papel {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
