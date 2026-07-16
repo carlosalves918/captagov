@@ -232,6 +232,8 @@ export async function carregarEstadoDb() {
     usuarios,
     convenioAtualId: metaRow?.convenioAtualId || null,
     protocoloSeq: metaRow?.protocoloSeq || 0,
+    view: metaRow?.view || null,
+    subView: metaRow?.subView || null,
     identidadeVisual: identidadeRow ? { nomeMunicipio: identidadeRow.nomeMunicipio || '', brasaoDataUrl: identidadeRow.brasaoDataUrl || null } : { nomeMunicipio: '', brasaoDataUrl: null },
   };
 }

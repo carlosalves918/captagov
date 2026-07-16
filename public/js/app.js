@@ -130,7 +130,12 @@ function persistirTodosUsuarios() {
 }
 
 function persistirMeta() {
-  salvarMetaDb({ convenioAtualId: STATE.convenioAtualId, protocoloSeq: STATE.protocoloSeq });
+  salvarMetaDb({
+    convenioAtualId: STATE.convenioAtualId,
+    protocoloSeq: STATE.protocoloSeq,
+    view: STATE.view,
+    subView: STATE.subView,
+  });
 }
 
 // Compatibilidade com o restante do código (que ainda chama "salvarEstado()"
@@ -347,9 +352,26 @@ async function carregarEstado() {
   STATE.identidadeVisual = p.identidadeVisual || { nomeMunicipio: '', brasaoDataUrl: null };
   STATE.convenioAtualId = p.convenioAtualId || null;
   STATE.protocoloSeq = p.protocoloSeq || 0;
+  // Restaura a tela em que o usuário estava antes de recarregar a página
+  // (F5). A validação (permissão de admin, etc.) acontece depois do login
+  // ser restaurado, em validarViewRestaurada().
+  if (p.view) STATE.view = p.view;
+  if (p.subView) STATE.subView = p.subView;
   STATE.convenios.forEach(c => {
     (c.documentosExtras || []).forEach(doc => { if (!doc.status) doc.status = doc.anexado ? 'anexado' : 'solicitado'; });
   });
+}
+
+// Roda depois de restaurarSessao() (ou seja, já sabendo se há usuário
+// logado e qual o papel dele). Se a tela restaurada da última sessão for
+// restrita a admin e o usuário atual não for admin, volta pro Painel Geral
+// em vez de deixar uma tela vazia/bloqueada logo na abertura.
+function validarViewRestaurada() {
+  const somenteAdmin = ['usuarios', 'identidadeVisual', 'backups'];
+  if (somenteAdmin.includes(STATE.view) && !podeAdministrar()) {
+    STATE.view = 'painel';
+    STATE.subView = 'contratadas';
+  }
 }
 
 // ==================== NAVEGAÇÃO ====================
@@ -370,11 +392,13 @@ function mudarView(view) {
   else if (view === 'relatorios') STATE.subView = 'contratadas';
   if (view !== 'cadastro') STATE.cadastroMensagem = null;
   if (view !== 'documentos') { STATE.docGeradoTipo = null; STATE.docGeradoTexto = null; }
+  persistirMeta();
   renderTudo();
 }
 
 function mudarSubView(sub) {
   STATE.subView = sub;
+  persistirMeta();
   renderTudo();
 }
 
@@ -4656,6 +4680,7 @@ window.dispatchEvent(new CustomEvent('captagov:changed'));
   try {
     await carregarEstado(); // já cuida de migrar dados de versões antigas, se existirem
     restaurarSessao(); // relogin automático se já havia sessão ativa nesta aba
+    validarViewRestaurada(); // garante que a tela restaurada é permitida pro papel do usuário logado
   } catch (e) {
     console.error('Erro ao carregar dados salvos:', e);
     toastErro('Não consegui carregar os dados salvos localmente. Veja o console para detalhes.');
