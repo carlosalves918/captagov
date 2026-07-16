@@ -179,6 +179,27 @@ function recalcularContratada(ct) {
     : (ct.dataFimVigenciaOriginal || '');
 }
 
+// Propaga a vigência das contratadas para o CONVÊNIO. O convênio guarda uma
+// data-base (dataFimOriginal, sincronizada sempre que o cadastro é salvo) e
+// aqui pegamos a data mais distante entre essa base e a vigência atual de
+// cada contratada — assim, um aditivo de prazo que posterga o contrato de
+// uma empresa também "puxa" a vigência do convênio (e o prazo de PC, que
+// depende dela) para frente. Só estica pra frente, nunca encurta sozinho.
+function recalcularVigenciaConvenio(c) {
+  if (!c) return;
+  if (!c.dataFimOriginal) c.dataFimOriginal = c.dataFim || '';
+  const datasContratadas = (c.financeiro?.contratadas || [])
+    .map(ct => ct.dataFimVigencia)
+    .filter(Boolean);
+  const todasDatas = [c.dataFimOriginal, ...datasContratadas].filter(Boolean);
+  if (!todasDatas.length) return;
+  const maisRecente = todasDatas.reduce((max, d) => (!max || new Date(d + 'T00:00:00') > new Date(max + 'T00:00:00')) ? d : max, null);
+  if (maisRecente && maisRecente !== c.dataFim) {
+    c.dataFim = maisRecente;
+    c.prazoLimitePC = calcularPrazoPC(c.dataFim, c.prazoPC || '60');
+  }
+}
+
 function toggleAditivos(ctId) {
   STATE.aditivoAbertoCtId = STATE.aditivoAbertoCtId === ctId ? null : ctId;
   renderFinanceiro();
@@ -250,8 +271,11 @@ async function adicionarAditivo(ctId) {
   });
 
   recalcularContratada(ct);
+  const dataFimConvenioAnterior = c.dataFim;
+  recalcularVigenciaConvenio(c);
   salvarEstado();
-  toastSucesso('Aditivo nº ' + numero + ' registrado — valor/vigência do contrato atualizados.');
+  const vigenciaConvenioMudou = (tipo === 'prazo' || tipo === 'valor_prazo') && c.dataFim !== dataFimConvenioAnterior;
+  toastSucesso('Aditivo nº ' + numero + ' registrado — valor/vigência do contrato atualizados.' + (vigenciaConvenioMudou ? ' Vigência do convênio também foi atualizada para ' + formatData(c.dataFim) + '.' : ''));
   renderFinanceiro();
 }
 
@@ -267,6 +291,7 @@ function removerAditivo(ctId, aditivoId) {
   if (!confirm('Remover o Aditivo nº ' + (ad.numero || '?') + '? O valor e a vigência do contrato serão recalculados sem ele.')) return;
   ct.aditivos = ct.aditivos.filter(a => a.id !== aditivoId);
   recalcularContratada(ct);
+  recalcularVigenciaConvenio(c);
   salvarEstado();
   renderFinanceiro();
 }
@@ -473,7 +498,7 @@ function salvarConvenio() {
     telefoneInst: form.c_telefone, emailInst: form.c_email,
     banco: form.c_banco, agencia: form.c_agencia, conta: form.c_conta,
     valor: form.c_valor, contrapartida: form.c_contrapartida,
-    dataAssinatura: form.c_data_assinatura, dataInicio, dataFim,
+    dataAssinatura: form.c_data_assinatura, dataInicio, dataFim, dataFimOriginal: dataFim,
     prazoPC: form.c_prazo_pc, prazoLimitePC,
     instituicaoId: STATE.convenioInstituicaoIdSelecionada || null,
     proponenteId: STATE.convenioProponenteIdSelecionada || null,
