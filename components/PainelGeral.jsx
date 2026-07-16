@@ -31,14 +31,6 @@ export default function PainelGeral() {
     )
     : convenios;
 
-  const totalGeralValor = lista.reduce(
-    (acc, c) => {
-      const res = calcularResumoFinanceiro(c.id);
-      return acc + (res ? res.valorTotal : 0);
-    },
-    0,
-  );
-
   return (
     <>
       <div className="stats-grid">
@@ -92,11 +84,6 @@ export default function PainelGeral() {
               + Novo Projeto
             </button>
           </div>
-        </div>
-
-        <div className="valor-total-lista">
-          <span>💰 Valor Total (Repasse + Contrapartida){termoBusca ? ' — resultado da busca' : ''}</span>
-          <strong>{formatMoeda(totalGeralValor)}</strong>
         </div>
 
         {lista.length === 0 ? (
