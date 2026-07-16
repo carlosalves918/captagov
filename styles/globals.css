@@ -560,6 +560,14 @@ tbody tr:last-child td {
   grid-column: 1 / -1;
 }
 
+.form-row-split {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  min-width: 0;
+}
+
 .form-label {
   font-size: 14px;
   font-weight: 500;
@@ -1230,6 +1238,9 @@ tbody tr:last-child td {
   }
   .main-header-date {
     display: none;
+  }
+  .form-row-split {
+    grid-template-columns: 1fr;
   }
 }
 

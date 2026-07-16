@@ -2000,13 +2000,15 @@ function renderCadastro() {
 
       <div class="form-grid">
         <div class="form-section-title">📌 Identificação do ${ehConvenio ? 'Convênio' : 'Projeto'}</div>
-        <div class="form-group">
-          <label class="form-label">Número / Identificação <span class="required">*</span></label>
-          <input class="form-input" type="text" id="c_numero" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Programa</label>
-          <input class="form-input" type="text" id="c_programa" placeholder="Ex: Programa de Aceleração do Crescimento" />
+        <div class="form-row-split">
+          <div class="form-group">
+            <label class="form-label">Número / Identificação <span class="required">*</span></label>
+            <input class="form-input" type="text" id="c_numero" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Programa</label>
+            <input class="form-input" type="text" id="c_programa" placeholder="Ex: Programa de Aceleração do Crescimento" />
+          </div>
         </div>
         ${ehConvenio ? `
         <div class="form-section-title">🏛️ Proponente (Concedente do Recurso)</div>
