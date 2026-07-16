@@ -469,6 +469,19 @@ function novoConvenio(tipo) {
   mudarView('cadastro');
 }
 
+// Seleciona o convênio como "atual" (destaca no Painel Geral e passa a ser
+// o alvo das ações de outras telas), SEM abrir a tela de cadastro/edição.
+// Usado pelo clique no corpo do card no Painel Geral — os ícones de ação
+// dentro do card (Abrir, PC, duplicar, excluir) continuam chamando suas
+// próprias funções e cortam a propagação do clique antes de chegar aqui.
+function selecionarConvenio(id) {
+  const c = STATE.convenios.find(x => x.id === id);
+  if (!c) return;
+  STATE.convenioAtualId = (STATE.convenioAtualId === id) ? null : id;
+  persistirMeta();
+  renderTudo();
+}
+
 function editarConvenio(id) {
   const c = STATE.convenios.find(x => x.id === id);
   if (!c) return;
@@ -4667,7 +4680,7 @@ Object.assign(window, {
   toggleRendimentoAnexos, updateSaldoPreview,
   // Expostos para a ponte React (ver contexts/AppContext.jsx) — telas ainda não
   // migradas continuam usando essas funções por baixo dos panos.
-  STATE, calcularResumoFinanceiro, statusConvenio,
+  STATE, calcularResumoFinanceiro, statusConvenio, selecionarConvenio,
   fazerLogin, fazerLogout, algumUsuarioTemSenha, usuarioAtual, papelAtual, podeAdministrar, PAPEL_LABEL,
 });
 

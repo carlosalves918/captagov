@@ -53,6 +53,7 @@ export function AppProvider({ children }) {
     mudarSubView: call('mudarSubView'),
     novoConvenio: call('novoConvenio'),
     editarConvenio: call('editarConvenio'),
+    selecionarConvenio: call('selecionarConvenio'),
     duplicarConvenio: call('duplicarConvenio'),
     excluirConvenio: call('excluirConvenio'),
     abrirPrestacaoContas: call('abrirPrestacaoContas'),

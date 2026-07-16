@@ -3,7 +3,7 @@ import { useApp } from '../contexts/AppContext';
 import { formatMoeda, parseMoeda, statusConvenio, formatData, statusVigencia, contarVigenciasAVencer, listarContratosAVencer } from '../public/js/utils.js';
 
 export default function PainelGeral() {
-  const { state, tick, novoConvenio, editarConvenio, abrirPrestacaoContas, abrirAditivoDireto, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
+  const { state, tick, novoConvenio, editarConvenio, selecionarConvenio, abrirPrestacaoContas, abrirAditivoDireto, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
   const [termo, setTermo] = useState('');
   const [alertaAberto, setAlertaAberto] = useState(true);
 
@@ -180,15 +180,16 @@ export default function PainelGeral() {
                 key={c.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => editarConvenio(c.id)}
-                onKeyDown={(e) => { if (e.key === 'Enter') editarConvenio(c.id); }}
+                aria-pressed={ativo}
+                onClick={() => selecionarConvenio(c.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter') selecionarConvenio(c.id); }}
               >
                 <div className="convenio-card-left">
                   <div className="convenio-card-title">
                     <span className={`badge ${c.tipo === 'projeto' ? 'badge-info' : 'badge-ok'}`}>
                       {c.tipo === 'projeto' ? 'Projeto' : 'Convênio'}
                     </span>{' '}
-                    {ativo && <span className="badge badge-ok" style={{ marginRight: 4 }}>● Em andamento</span>}
+                    {ativo && <span className="badge badge-ok" style={{ marginRight: 4 }}>● Selecionado</span>}
                     {c.numero || 'sem número'} — {c.programa || 'Sem programa'}
                   </div>
                   <div className="convenio-card-sub">{c.conveniente || c.proponente || 'Convenente não informado'}</div>
