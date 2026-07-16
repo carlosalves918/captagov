@@ -16,6 +16,7 @@ import {
   salvarInstituicaoDb, removerInstituicaoDb, salvarProponenteDb, removerProponenteDb,
   criarSnapshotAutoDb, listarSnapshotsAutoDb, buscarSnapshotAutoDb, removerSnapshotAutoDb,
   salvarResponsavelTecnicoDb, removerResponsavelTecnicoDb, salvarUsuarioDb, removerUsuarioDb,
+  salvarIdentidadeVisualDb,
 } from './db.js';
 import { toastSucesso, toastErro, toastAviso } from './toast.js';
 import { gerarDocumentoAutomatico, gerarModeloEsqueleto, TIPOS_COM_AUTOPREENCHIMENTO } from './features/justificativa.js';
@@ -29,6 +30,7 @@ const STATE = {
   responsaveisTecnicos: [],
   usuarios: [],
   backupsAutoLista: [],
+  identidadeVisual: { nomeMunicipio: '', brasaoDataUrl: null },
   convenioAtualId: null,
   convenioEditandoId: null,
   emendaEditandoId: null,
@@ -339,6 +341,7 @@ async function carregarEstado() {
   STATE.proponentes = p.proponentes || [];
   STATE.responsaveisTecnicos = p.responsaveisTecnicos || [];
   STATE.usuarios = p.usuarios || [];
+  STATE.identidadeVisual = p.identidadeVisual || { nomeMunicipio: '', brasaoDataUrl: null };
   STATE.convenioAtualId = p.convenioAtualId || null;
   STATE.protocoloSeq = p.protocoloSeq || 0;
   STATE.convenios.forEach(c => {
@@ -1867,6 +1870,7 @@ function renderBody() {
     case 'backups': el.innerHTML = renderBackups(); break;
     case 'responsaveisTecnicos': el.innerHTML = renderResponsaveisTecnicos(); break;
     case 'usuarios': el.innerHTML = renderUsuarios(); break;
+    case 'identidadeVisual': el.innerHTML = renderIdentidadeVisual(); break;
     default: el.innerHTML = '<div class="empty-state"><div class="empty-state-title">Página em desenvolvimento</div></div>';
   }
 
@@ -2836,7 +2840,8 @@ function renderDocsIA() {
       <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
         <button class="btn btn-primary" onclick="salvarDocumentoGerado()">💾 ${editando ? 'Salvar alterações' : 'Salvar documento'}</button>
         <button class="btn btn-secondary" onclick="copiarDocumentoGerado()">Copiar</button>
-        <button class="btn btn-secondary" onclick="baixarDocumentoGerado()">Baixar .txt</button>
+        <button class="btn btn-secondary" onclick="baixarDocumentoGeradoPDF()">📄 Baixar PDF</button>
+        <button class="btn btn-ghost" onclick="baixarDocumentoGerado()">Baixar .txt</button>
         <button class="btn btn-ghost" onclick="fecharDocumentoGerado()">Cancelar</button>
       </div>
     `;
@@ -2905,7 +2910,8 @@ function renderDocumentosSalvos(c) {
             ${doc.status === 'aprovado'
               ? `<button class="btn btn-ghost btn-sm" onclick="reverterDocumentoSalvo('${doc.id}')">↩ Reverter p/ rascunho</button>`
               : `<button class="btn btn-ghost btn-sm" style="color:var(--green-600);" onclick="aprovarDocumentoSalvo('${doc.id}')">✓ Aprovar</button>`}
-            <button class="btn btn-ghost btn-sm" onclick="baixarDocumentoSalvo('${doc.id}')">⬇ Baixar</button>
+            <button class="btn btn-ghost btn-sm" onclick="baixarDocumentoSalvoPDF('${doc.id}')">📄 PDF</button>
+            <button class="btn btn-ghost btn-sm" onclick="baixarDocumentoSalvo('${doc.id}')">⬇ .txt</button>
             <button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerDocumentoSalvo('${doc.id}')">🗑 Remover</button>
           </div>
         </div>
@@ -3543,6 +3549,72 @@ function limparFormUsuario() {
   if (nota) nota.innerHTML = '';
 }
 
+// ==================== IDENTIDADE VISUAL (TIMBRE OFICIAL) ====================
+// Brasão + nome do município usados no cabeçalho do Relatório Financeiro (PDF)
+// e dos documentos gerados (Ofício, Memorando, Justificativa) — no lugar da
+// marca do próprio CaptaGov, já que esses documentos são pra uso oficial.
+let _brasaoTempDataUrl = undefined; // undefined = não alterado nesta sessão de edição; null = removido; string = novo
+
+function renderIdentidadeVisual() {
+  const iv = STATE.identidadeVisual || {};
+  const brasaoAtual = _brasaoTempDataUrl !== undefined ? _brasaoTempDataUrl : iv.brasaoDataUrl;
+  return `
+    <div class="card">
+      <div class="card-title">🏛️ Identidade Visual do Município</div>
+      <div class="card-subtitle">Esse nome e brasão passam a aparecer no cabeçalho do Relatório Financeiro (PDF) e dos documentos gerados (Ofício, Memorando, Justificativa), no lugar da marca do CaptaGov — pra ficarem prontos pra uso oficial.</div>
+      <div id="identidadeNote"></div>
+      <div class="form-grid" style="margin-top:16px;">
+        <div class="form-group full-width">
+          <label class="form-label">Nome do Município / Órgão (cabeçalho dos documentos)</label>
+          <input class="form-input" id="iv_nome" value="${escapeHtml(iv.nomeMunicipio || '')}" placeholder="Ex: Prefeitura Municipal de Itapissuma" />
+        </div>
+        <div class="form-group full-width">
+          <label class="form-label">Brasão / Logo (PNG ou JPG — fundo transparente de preferência)</label>
+          <input class="form-input" type="file" id="iv_brasao" accept=".png,.jpg,.jpeg" onchange="preverBrasao(this)" />
+          <div id="iv_brasao_preview" style="margin-top:10px;">
+            ${brasaoAtual
+              ? `<div style="display:flex;align-items:center;gap:12px;">
+                   <img src="${brasaoAtual}" style="height:64px;border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:4px;background:var(--white);" />
+                   <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerBrasao()">Remover brasão</button>
+                 </div>`
+              : '<span style="color:var(--gray-400);font-size:13px;">Nenhum brasão definido — os documentos usam a marca padrão do CaptaGov.</span>'}
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:12px;">
+        <button class="btn btn-primary btn-lg" onclick="salvarIdentidadeVisual()">💾 Salvar Identidade Visual</button>
+      </div>
+    </div>
+  `;
+}
+
+function preverBrasao(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const r = new FileReader();
+  r.onload = () => {
+    _brasaoTempDataUrl = r.result;
+    renderTudo();
+  };
+  r.readAsDataURL(file);
+}
+
+function removerBrasao() {
+  _brasaoTempDataUrl = null;
+  renderTudo();
+}
+
+async function salvarIdentidadeVisual() {
+  const nomeEl = document.getElementById('iv_nome');
+  const nomeMunicipio = nomeEl ? nomeEl.value.trim() : '';
+  const brasaoDataUrl = _brasaoTempDataUrl !== undefined ? _brasaoTempDataUrl : (STATE.identidadeVisual?.brasaoDataUrl || null);
+  STATE.identidadeVisual = { nomeMunicipio, brasaoDataUrl };
+  await salvarIdentidadeVisualDb(STATE.identidadeVisual);
+  _brasaoTempDataUrl = undefined;
+  toastSucesso('Identidade visual salva — os próximos relatórios e documentos já usam o novo timbre.');
+  renderTudo();
+}
+
 function limparFormEmenda() {
   ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
     const el = document.getElementById(k);
@@ -3629,6 +3701,126 @@ function updateSaldoPreview() {
 }
 
 // ==================== GERAÇÃO DE PDF ====================
+// Desenha a faixa de cabeçalho azul-marinho no topo do PDF. Se o município já
+// cadastrou brasão/nome em Identidade Visual, usa isso; senão cai na marca
+// padrão do CaptaGov. Retorna o Y onde o conteúdo do documento deve começar.
+function desenharCabecalhoPDF(doc, W, M, subtitulo) {
+  const iv = STATE.identidadeVisual || {};
+  const NAVY = [11, 27, 51];
+  const GREEN = [22, 163, 74];
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, W, 30, 'F');
+
+  if (iv.brasaoDataUrl) {
+    try {
+      const formato = /^data:image\/(png|jpe?g)/i.test(iv.brasaoDataUrl)
+        ? (/jpe?g/i.test(iv.brasaoDataUrl.slice(0, 20)) ? 'JPEG' : 'PNG')
+        : 'PNG';
+      doc.addImage(iv.brasaoDataUrl, formato, M, 5, 20, 20);
+    } catch (e) { /* formato de imagem incompatível — segue sem brasão */ }
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(iv.nomeMunicipio || 'Documento Oficial', M + 24, 15);
+    doc.setFontSize(9);
+    doc.setTextColor(180, 200, 220);
+    doc.setFont('helvetica', 'normal');
+    doc.text(subtitulo, M + 24, 22);
+  } else if (iv.nomeMunicipio) {
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(15);
+    doc.setFont('helvetica', 'bold');
+    doc.text(iv.nomeMunicipio, M, 15);
+    doc.setFontSize(9);
+    doc.setTextColor(180, 200, 220);
+    doc.setFont('helvetica', 'normal');
+    doc.text(subtitulo, M, 22);
+  } else {
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.text('CAPT', M, 14);
+    doc.setTextColor(...GREEN);
+    doc.text('GOV', M + 30, 14);
+    doc.setFontSize(10);
+    doc.setTextColor(180, 200, 220);
+    doc.setFont('helvetica', 'normal');
+    doc.text(subtitulo, M, 22);
+  }
+  doc.setTextColor(180, 200, 220);
+  doc.setFontSize(9);
+  doc.text(new Date().toLocaleDateString('pt-BR'), W - M - 30, 22, { align: 'right' });
+  return 40;
+}
+
+// Monta um PDF formatado (timbre + título + corpo do texto com quebra de
+// página automática) a partir do texto de um documento gerado (Ofício,
+// Memorando, Justificativa etc.) — em vez do antigo .txt sem formatação.
+function gerarPDFDocumentoTexto(titulo, texto, c) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF('p', 'mm', 'a4');
+  const W = 210, M = 20;
+  const NAVY = [11, 27, 51];
+
+  let y = desenharCabecalhoPDF(doc, W, M, titulo);
+  y += 4;
+  doc.setTextColor(...NAVY);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.text(titulo, M, y);
+  y += 8;
+
+  if (c) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text('Convênio: ' + (c.numero || '—') + '   |   Convenente: ' + (c.conveniente || c.proponente || '—'), M, y);
+    y += 8;
+  }
+
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(10.5);
+  doc.setFont('helvetica', 'normal');
+  const larguraUtil = W - 2 * M;
+  const linhas = doc.splitTextToSize(texto || '', larguraUtil);
+  const margemInferior = 20;
+  linhas.forEach(linha => {
+    if (y > 297 - margemInferior) { doc.addPage(); y = 20; }
+    doc.text(linha, M, y);
+    y += 5.4;
+  });
+
+  const totalPaginas = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPaginas; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Página ${i} de ${totalPaginas}`, W - M, 290, { align: 'right' });
+  }
+  return doc;
+}
+
+// Baixa em PDF o documento que está aberto no editor (ainda não salvo, ou em revisão).
+function baixarDocumentoGeradoPDF() {
+  const el = document.getElementById('docGeradoTexto');
+  if (!el) return;
+  const tipo = TIPOS_DOC_IA.find(t => t.id === STATE.docGeradoTipo);
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  const titulo = tipo ? tipo.nome : 'Documento';
+  const pdf = gerarPDFDocumentoTexto(titulo, el.value, c);
+  pdf.save(titulo.replace(/\s+/g, '_') + '.pdf');
+}
+
+// Baixa em PDF um documento já salvo na lista de documentos do convênio.
+function baixarDocumentoSalvoPDF(id) {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c || !c.docsGeradosIA) return;
+  const docSalvo = c.docsGeradosIA.find(d => d.id === id);
+  if (!docSalvo) return;
+  const pdf = gerarPDFDocumentoTexto(docSalvo.titulo, docSalvo.texto, c);
+  pdf.save(docSalvo.titulo.replace(/\s+/g, '_') + '.pdf');
+}
+
 function gerarPDFRelatorio() {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
   if (!c) { toastAviso('Selecione um convênio.'); return; }
@@ -3646,22 +3838,7 @@ function gerarPDFRelatorio() {
   const GRAY = [100, 116, 139];
   const TEAL = [13, 148, 136];
 
-  // Cabeçalho
-  doc.setFillColor(...NAVY);
-  doc.rect(0, 0, W, 30, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.text('CAPT', M, 14);
-  doc.setTextColor(...GREEN);
-  doc.text('GOV', M + 30, 14);
-  doc.setFontSize(10);
-  doc.setTextColor(180, 200, 220);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Relatório Financeiro', M, 22);
-  doc.text(new Date().toLocaleDateString('pt-BR'), W - M - 30, 22, { align: 'right' });
-
-  y = 40;
+  y = desenharCabecalhoPDF(doc, W, M, 'Relatório Financeiro');
   doc.setTextColor(...NAVY);
   doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
@@ -3921,6 +4098,7 @@ Object.assign(window, {
   removerRendimento, renderTudo, renderBody, restaurarSnapshotAuto, excluirSnapshotAuto,
   reverterDocumentoSalvo, salvarConvenio, salvarDocumentoGerado, salvarEmenda, salvarInstituicao, salvarProponente,
   salvarResponsavelTecnico, salvarUsuario,
+  preverBrasao, removerBrasao, salvarIdentidadeVisual, baixarDocumentoGeradoPDF, baixarDocumentoSalvoPDF,
   toggleAditivos, toggleExtratoAnexos, togglePagamentoDocs, togglePagamentoStatus,
   toggleRendimentoAnexos, updateSaldoPreview,
   // Expostos para a ponte React (ver contexts/AppContext.jsx) — telas ainda não

@@ -12,6 +12,7 @@ const NOMES_ABAS = {
   proponentes: 'Proponentes/Convenentes',
   responsaveisTecnicos: 'Responsável Técnico',
   usuarios: 'Usuários',
+  identidadeVisual: 'Identidade Visual',
   backups: 'Backups Automáticos',
 };
 
@@ -27,6 +28,7 @@ const SECAO_DA_ABA = {
   proponentes: 'Cadastros de Apoio',
   responsaveisTecnicos: 'Cadastros de Apoio',
   usuarios: 'Administração',
+  identidadeVisual: 'Administração',
 };
 
 export default function Header({ onToggleMenu }) {

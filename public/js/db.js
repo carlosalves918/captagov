@@ -205,10 +205,15 @@ export function salvarMetaDb(meta) {
   }, 300);
 }
 
+/** Identidade visual (brasão + nome do município) usada no timbre dos PDFs e documentos gerados. */
+export function salvarIdentidadeVisualDb(identidade) {
+  return db.meta.put({ chave: 'identidadeVisual', ...identidade }).catch(e => console.error('Erro ao salvar identidade visual:', e));
+}
+
 /** Carrega tudo do banco pras estruturas em memória. Retorna { convenios, emendas, meta }. */
 export async function carregarEstadoDb() {
   await migrarParaTabelas();
-  const [convenios, emendas, instituicoes, proponentes, responsaveisTecnicos, usuarios, metaRow] = await Promise.all([
+  const [convenios, emendas, instituicoes, proponentes, responsaveisTecnicos, usuarios, metaRow, identidadeRow] = await Promise.all([
     db.convenios.toArray(),
     db.emendas.toArray(),
     db.instituicoes.toArray(),
@@ -216,6 +221,7 @@ export async function carregarEstadoDb() {
     db.responsaveisTecnicos.toArray(),
     db.usuarios.toArray(),
     db.meta.get('geral'),
+    db.meta.get('identidadeVisual'),
   ]);
   return {
     convenios,
@@ -226,6 +232,7 @@ export async function carregarEstadoDb() {
     usuarios,
     convenioAtualId: metaRow?.convenioAtualId || null,
     protocoloSeq: metaRow?.protocoloSeq || 0,
+    identidadeVisual: identidadeRow ? { nomeMunicipio: identidadeRow.nomeMunicipio || '', brasaoDataUrl: identidadeRow.brasaoDataUrl || null } : { nomeMunicipio: '', brasaoDataUrl: null },
   };
 }
 

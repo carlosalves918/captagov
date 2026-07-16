@@ -29,6 +29,7 @@ const GRUPOS = [
     titulo: 'Administração',
     itens: [
       { id: 'usuarios', icon: '👤', label: 'Usuários' },
+      { id: 'identidadeVisual', icon: '🏛️', label: 'Identidade Visual' },
     ],
   },
 ];
