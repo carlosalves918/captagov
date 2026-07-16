@@ -129,6 +129,39 @@ export function contarVigenciasAVencer(convenios, limiteDias = 30) {
   }).length;
 }
 
+// Varre TODAS as contratadas de TODOS os convênios e devolve as que estão
+// com a vigência do contrato vencida ou perto de vencer (<= limiteDias),
+// ordenadas da mais urgente pra menos urgente. Usado no alerta do Painel
+// Geral para avisar sobre contratos que podem precisar de um aditivo de
+// prazo antes de vencer.
+export function listarContratosAVencer(convenios, limiteDias = 30) {
+  const resultado = [];
+  (convenios || []).forEach((c) => {
+    const contratadas = c.financeiro?.contratadas || [];
+    contratadas.forEach((ct) => {
+      const v = statusVigencia({ dataFim: ct.dataFimVigencia });
+      if (v.dias !== null && v.dias <= limiteDias) {
+        resultado.push({
+          convenioId: c.id,
+          convenioNumero: c.numero || 'sem número',
+          contratadaId: ct.id,
+          razaoSocial: ct.razaoSocial || 'Contratada sem nome',
+          numeroContrato: ct.numeroContrato || '',
+          dataFim: ct.dataFimVigencia,
+          dias: v.dias,
+          cls: v.cls,
+          label: v.label,
+        });
+      }
+    });
+  });
+  return resultado.sort((a, b) => a.dias - b.dias);
+}
+
+export function contarContratosAVencer(convenios, limiteDias = 30) {
+  return listarContratosAVencer(convenios, limiteDias).length;
+}
+
 // ==================== VALIDAÇÃO (NOVO) ====================
 // Antes o app só mascarava CPF/CNPJ visualmente, sem checar o dígito
 // verificador. Isso permitia salvar convênios com CNPJ/CPF inválido,

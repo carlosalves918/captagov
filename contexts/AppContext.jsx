@@ -56,6 +56,7 @@ export function AppProvider({ children }) {
     duplicarConvenio: call('duplicarConvenio'),
     excluirConvenio: call('excluirConvenio'),
     abrirPrestacaoContas: call('abrirPrestacaoContas'),
+    abrirAditivoDireto: call('abrirAditivoDireto'),
     abrirTelaBackups: call('abrirTelaBackups'),
     exportarDados: call('exportarDados'),
     importarDados: call('importarDados'),

@@ -205,6 +205,15 @@ function toggleAditivos(ctId) {
   renderFinanceiro();
 }
 
+// Abre (sem alternar/fechar) o painel de aditivos de uma contratada — usado
+// a partir do Extrato de Aditivos e do alerta de contratos a vencer, onde
+// sempre queremos garantir que o painel abra, nunca feche.
+function abrirAditivoAqui(ctId) {
+  STATE.aditivoAbertoCtId = ctId;
+  STATE.subView = 'contratadas';
+  renderTudo();
+}
+
 function atualizarCamposAditivo() {
   const tipo = document.getElementById('ad_tipo')?.value;
   const blocoValor = document.getElementById('ad_bloco_valor');
@@ -567,6 +576,19 @@ function abrirPrestacaoContas(id) {
   if (c && c.tipo === 'projeto') { toastAviso('Projetos não têm prestação de contas — apenas Convênios.'); return; }
   STATE.convenioAtualId = id;
   STATE.subView = 'contratadas';
+  salvarEstado();
+  mudarView('prestacao');
+}
+
+// Atalho usado pelo alerta de "contratos a vencer" do Painel Geral: abre
+// direto a prestação de contas do convênio já com o painel de aditivos da
+// contratada em risco expandido, pra agilizar o registro do aditivo.
+function abrirAditivoDireto(convenioId, contratadaId) {
+  const c = STATE.convenios.find(x => x.id === convenioId);
+  if (!c) return;
+  STATE.convenioAtualId = convenioId;
+  STATE.subView = 'contratadas';
+  STATE.aditivoAbertoCtId = contratadaId;
   salvarEstado();
   mudarView('prestacao');
 }
@@ -2133,6 +2155,7 @@ function renderPrestacaoContas() {
     { id: 'pagamentos', label: 'Pagamentos' },
     { id: 'extratos', label: 'Extratos' },
     { id: 'rendimentos', label: 'Rendimentos' },
+    { id: 'aditivos', label: 'Extrato de Aditivos' },
     { id: 'docs', label: 'Documentos' },
   ];
 
@@ -2185,6 +2208,7 @@ function renderSubPrestacaoContas(c, resumo) {
     case 'pagamentos': return renderPagamentos(c, resumo);
     case 'extratos': return renderExtratos(c);
     case 'rendimentos': return renderRendimentos(c);
+    case 'aditivos': return renderExtratoAditivos(c);
     case 'docs': return renderDocs();
     default: return '';
   }
@@ -2384,6 +2408,91 @@ function renderAditivosPanel(ct) {
         </div>
       ` : '<div class="empty-state text-sm" style="padding:16px 0;">Nenhum aditivo registrado para este contrato ainda.</div>'}
     </div>
+  `;
+}
+
+function renderExtratoAditivos(c) {
+  const fin = c.financeiro;
+  const contratadas = fin.contratadas || [];
+  const todos = [];
+  contratadas.forEach(ct => {
+    garantirCamposAditivo(ct);
+    (ct.aditivos || []).forEach(a => todos.push({ ct, a }));
+  });
+  todos.sort((x, y) => (y.a.criadoEm || 0) - (x.a.criadoEm || 0));
+
+  const totalAditivadoValor = todos
+    .filter(({ a }) => a.tipo === 'valor' || a.tipo === 'valor_prazo')
+    .reduce((soma, { a }) => soma + (Number(a.valorAditivo) || 0), 0);
+  const qtdAditivosPrazo = todos.filter(({ a }) => a.tipo === 'prazo' || a.tipo === 'valor_prazo').length;
+  const contratosEmRisco = contratadas.filter(ct => {
+    const v = statusVigencia({ dataFim: ct.dataFimVigencia });
+    return v.dias !== null && v.dias <= 30;
+  });
+
+  return `
+    <div style="margin-bottom:20px;">
+      <div class="card-title" style="font-size:16px;">Extrato de Aditivos</div>
+      <div class="card-subtitle">Visão consolidada de todos os aditivos (valor e prazo) registrados nas contratadas deste convênio.</div>
+
+      <div class="fin-summary-grid" style="margin-top:12px;">
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Total de Aditivos</div>
+          <div class="fin-summary-value neutral">${todos.length}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Total Aditivado em Valor</div>
+          <div class="fin-summary-value">${formatMoeda(totalAditivadoValor)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Aditivos de Prazo</div>
+          <div class="fin-summary-value neutral">${qtdAditivosPrazo}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Contratos a Vencer (30d) / Vencidos</div>
+          <div class="fin-summary-value ${contratosEmRisco.length ? 'negative' : ''}">${contratosEmRisco.length}</div>
+        </div>
+      </div>
+    </div>
+
+    ${contratosEmRisco.length > 0 ? `
+      <div class="alert alert-warning" style="margin-top:4px;">
+        ⚠️ ${contratosEmRisco.length} contrato(s) com vigência vencida ou perto de vencer sem um aditivo recente:
+        ${contratosEmRisco.map(ct => {
+          const v = statusVigencia({ dataFim: ct.dataFimVigencia });
+          return `<div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span class="badge ${v.cls}" style="font-size:10.5px;">${v.label}</span>
+            <strong>${escapeHtml(ct.razaoSocial)}</strong>
+            ${ct.numeroContrato ? `<span style="color:var(--gray-500);">(contrato nº ${escapeHtml(ct.numeroContrato)})</span>` : ''}
+            <button class="btn btn-ghost btn-sm" onclick="abrirAditivoAqui('${ct.id}')" title="Registrar aditivo">📑 Registrar aditivo</button>
+          </div>`;
+        }).join('')}
+      </div>
+    ` : ''}
+
+    ${todos.length > 0 ? `
+      <div class="table-wrapper" style="margin-top:16px;">
+        <table class="table-comfortable">
+          <thead><tr><th>Contratada</th><th>Nº Aditivo</th><th>Tipo</th><th>Assinatura</th><th>Valor Aditivado</th><th>Nova Vigência</th><th>Anexo</th><th></th></tr></thead>
+          <tbody>
+            ${todos.map(({ ct, a }) => `
+              <tr>
+                <td><strong>${escapeHtml(ct.razaoSocial)}</strong>${ct.numeroContrato ? `<div style="font-size:10px;color:var(--gray-500);">contrato nº ${escapeHtml(ct.numeroContrato)}</div>` : ''}</td>
+                <td>${escapeHtml(a.numero)}</td>
+                <td>${escapeHtml((TIPOS_ADITIVO.find(t => t.id === a.tipo) || {}).label || a.tipo)}</td>
+                <td style="white-space:nowrap;">${a.dataAssinatura ? formatData(a.dataAssinatura) : '—'}</td>
+                <td class="font-mono">${(a.tipo === 'valor' || a.tipo === 'valor_prazo') ? '+ ' + formatMoeda(a.valorAditivo) : '—'}</td>
+                <td style="white-space:nowrap;">${(a.tipo === 'prazo' || a.tipo === 'valor_prazo') ? formatData(a.novaDataFim) : '—'}</td>
+                <td>${a.arquivo && a.arquivoDataUrl
+                  ? `<a href="${a.arquivoDataUrl}" download="${escapeHtml(a.arquivo)}" class="btn btn-ghost btn-sm td-truncate" title="${escapeHtml(a.arquivo)}">📎</a>`
+                  : '<span style="font-size:10px;color:var(--gray-400);">—</span>'}</td>
+                <td><button class="btn btn-ghost btn-sm" onclick="abrirAditivoAqui('${ct.id}')" title="Ver na contratada">Ver</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum aditivo registrado neste convênio ainda.</div>'}
   `;
 }
 
@@ -3794,7 +3903,7 @@ function gerarPDFRelatorio() {
 // template string com onclick="nomeDaFuncao(...)", então cada função
 // chamada dessa forma precisa ser atribuída a window explicitamente.
 Object.assign(window, {
-  abrirPrestacaoContas, abrirTelaBackups, adicionarAditivo, adicionarContratada, adicionarDocExtra, anexarDocExtra,
+  abrirAditivoAqui, abrirAditivoDireto, abrirPrestacaoContas, abrirTelaBackups, adicionarAditivo, adicionarContratada, adicionarDocExtra, anexarDocExtra,
   anexarDocPagamento, aprovarDocumentoSalvo, atualizarCamposAditivo, baixarDocumentoGerado, baixarDocumentoSalvo, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
   editarDocumentoSalvo, editarEmenda, editarInstituicao, editarProponente, editarResponsavelTecnico, editarUsuario,

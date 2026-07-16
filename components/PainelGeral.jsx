@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { formatMoeda, parseMoeda, statusConvenio, formatData, statusVigencia, contarVigenciasAVencer } from '../public/js/utils.js';
+import { formatMoeda, parseMoeda, statusConvenio, formatData, statusVigencia, contarVigenciasAVencer, listarContratosAVencer } from '../public/js/utils.js';
 
 export default function PainelGeral() {
-  const { state, tick, novoConvenio, editarConvenio, abrirPrestacaoContas, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
+  const { state, tick, novoConvenio, editarConvenio, abrirPrestacaoContas, abrirAditivoDireto, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
   const [termo, setTermo] = useState('');
+  const [alertaAberto, setAlertaAberto] = useState(true);
 
   const convenios = state?.convenios || [];
 
@@ -21,6 +22,11 @@ export default function PainelGeral() {
     return st.cls === 'badge-warn' || st.cls === 'badge-danger';
   }).length;
   const vigenciasAVencer = contarVigenciasAVencer(convenios, 30);
+  const contratosAVencer = useMemo(
+    () => listarContratosAVencer(convenios, 30),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick],
+  );
 
   const termoBusca = termo.trim().toLowerCase();
   const lista = termoBusca
@@ -70,7 +76,60 @@ export default function PainelGeral() {
             <div className="stat-label">Vigências a Vencer (30d) / Vencidas</div>
           </div>
         </div>
+        <div className="stat-card">
+          <div className="stat-icon danger">📑</div>
+          <div className="stat-content">
+            <div className="stat-value">{contratosAVencer.length}</div>
+            <div className="stat-label">Contratos a Vencer (30d) sem Aditivo</div>
+          </div>
+        </div>
       </div>
+
+      {contratosAVencer.length > 0 && alertaAberto && (
+        <div className="alert alert-warning mb-6" style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ fontWeight: 600 }}>
+              ⚠️ {contratosAVencer.length} contrato{contratosAVencer.length > 1 ? 's' : ''} com vigência vencida ou perto de vencer — considere registrar um aditivo de prazo.
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ flexShrink: 0 }}
+              onClick={() => setAlertaAberto(false)}
+              title="Ocultar alerta"
+            >
+              ✕
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+            {contratosAVencer.slice(0, 8).map((item) => (
+              <div
+                key={item.contratadaId}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', background: 'var(--white)', border: '1px solid #FCD34D', borderRadius: 'var(--radius-sm)', padding: '8px 12px' }}
+              >
+                <span className={`badge ${item.cls}`} style={{ fontSize: 10.5 }}>{item.label}</span>
+                <strong>{item.razaoSocial}</strong>
+                <span style={{ color: 'var(--gray-500)', fontSize: 13 }}>
+                  {item.numeroContrato ? `contrato nº ${item.numeroContrato} · ` : ''}convênio {item.convenioNumero} · vence {formatData(item.dataFim)}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  style={{ marginLeft: 'auto' }}
+                  onClick={() => abrirAditivoDireto(item.convenioId, item.contratadaId)}
+                >
+                  📑 Registrar aditivo
+                </button>
+              </div>
+            ))}
+            {contratosAVencer.length > 8 && (
+              <div style={{ fontSize: 13, color: 'var(--gray-500)' }}>
+                + {contratosAVencer.length - 8} outro(s) contrato(s) — abra o Extrato de Aditivos de cada convênio para ver todos.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="card mb-6">
         <div className="painel-toolbar" style={{ marginBottom: 20 }}>
