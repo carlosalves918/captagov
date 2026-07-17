@@ -415,6 +415,7 @@ function calcularResumoFinanceiro(id) {
   const totalEntradas = (f.extratos || []).reduce((a, e) => a + (e.entradas || 0), 0);
   const totalSaidas = (f.extratos || []).reduce((a, e) => a + (e.saidas || 0), 0);
   const movExtrato = totalEntradas - totalSaidas;
+  const divergenciaEntradas = valorTotal - totalEntradas;
   const totalRendimento = (f.rendimentos || []).reduce((a, r) => a + (r.rendimento || 0), 0);
   const totalUsoRendimento = (f.usos || []).reduce((a, u) => a + (u.valor || 0), 0);
   const saldoRendimento = totalRendimento - totalUsoRendimento;
@@ -428,7 +429,7 @@ function calcularResumoFinanceiro(id) {
   const saldoContrato = totalContratado > 0 ? (totalContratado - totalPago) : null;
   const rendimentoMedioMensal = (f.rendimentos && f.rendimentos.length) ? totalRendimento / f.rendimentos.length : 0;
   const mesesSemRendimento = calcularMesesSemLancamento(c, f.rendimentos || []);
-  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, rendimentoMedioMensal, mesesSemRendimento, fin: f };
+  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, divergenciaEntradas, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, rendimentoMedioMensal, mesesSemRendimento, fin: f };
 }
 
 // Compara os meses da vigência do convênio (dataInicio -> dataFim, limitado a
@@ -457,6 +458,20 @@ function calcularMesesSemLancamento(c, rendimentos) {
 const TIPOS_APLICACAO_RENDIMENTO = [
   { id: 'poupanca', label: 'Poupança' },
   { id: 'fundo_automatico', label: 'Fundo de Aplicação Automática' },
+  { id: 'outro', label: 'Outro' },
+];
+
+const CATEGORIAS_ENTRADA_EXTRATO = [
+  { id: 'repasse', label: 'Repasse/Transferência' },
+  { id: 'contrapartida', label: 'Contrapartida' },
+  { id: 'devolucao', label: 'Devolução' },
+  { id: 'outro', label: 'Outro' },
+];
+
+const CATEGORIAS_SAIDA_EXTRATO = [
+  { id: 'pagamento', label: 'Pagamento a Contratada' },
+  { id: 'tarifa', label: 'Tarifa Bancária' },
+  { id: 'estorno', label: 'Estorno' },
   { id: 'outro', label: 'Outro' },
 ];
 
@@ -1729,6 +1744,8 @@ async function lancarExtrato() {
     mes: document.getElementById('ex_mes')?.value || '',
     entradas: parseMoeda(document.getElementById('ex_entradas')?.value || '0'),
     saidas: parseMoeda(document.getElementById('ex_saidas')?.value || '0'),
+    categoriaEntrada: document.getElementById('ex_cat_entrada')?.value || '',
+    categoriaSaida: document.getElementById('ex_cat_saida')?.value || '',
     obs: document.getElementById('ex_obs')?.value || '',
     anexos: anexos,
   });
@@ -2485,7 +2502,7 @@ function renderPrestacaoContas() {
     { id: 'extratos', label: 'Extratos' },
     { id: 'rendimentos', label: 'Rendimentos' },
     { id: 'aditivos', label: 'Extrato de Aditivos' },
-    { id: 'docs', label: 'Documentos' },
+    { id: 'docs', label: 'Documentos do Convênio' },
   ];
 
   return `
@@ -2536,7 +2553,7 @@ function renderSubPrestacaoContas(c, resumo) {
     case 'vigencia': return renderVigenciaConvenio(c);
     case 'contratadas': return renderContratadas(c);
     case 'pagamentos': return renderPagamentos(c, resumo);
-    case 'extratos': return renderExtratos(c);
+    case 'extratos': return renderExtratos(c, resumo);
     case 'rendimentos': return renderRendimentos(c, resumo);
     case 'aditivos': return renderExtratoAditivos(c);
     case 'docs': return renderDocs();
@@ -2975,31 +2992,85 @@ function renderPagamentos(c, resumo) {
   `;
 }
 
-function renderExtratos(c) {
+function renderExtratos(c, resumo) {
   const fin = c.financeiro;
+  const r = resumo || calcularResumoFinanceiro(c.id) || {};
+  const divergencia = r.divergenciaEntradas || 0;
+  const temDivergencia = Math.abs(divergencia) >= 0.01;
+
   return `
     <div style="margin-bottom:20px;">
-      <div class="card-title" style="font-size:16px;">Lançar Extrato Mensal</div>
+      <div class="card-title" style="font-size:16px;">Extrato da Conta do Convênio</div>
+      <div class="card-subtitle">Movimentação bancária mensal (entradas e saídas). O saldo acumulado deve refletir, ao final, o valor total repassado.</div>
+
+      <div class="fin-summary-grid" style="margin-top:12px;">
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Total de Entradas</div>
+          <div class="fin-summary-value positive">${formatMoeda(r.totalEntradas)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Total de Saídas</div>
+          <div class="fin-summary-value negative">${formatMoeda(r.totalSaidas)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Saldo Acumulado</div>
+          <div class="fin-summary-value ${(r.movExtrato || 0) >= 0 ? 'positive' : 'negative'}">${formatMoeda(r.movExtrato)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Divergência vs. Valor Repassado</div>
+          <div class="fin-summary-value ${temDivergencia ? 'negative' : 'neutral'}">${formatMoeda(divergencia)}</div>
+        </div>
+      </div>
+    </div>
+
+    ${temDivergencia ? `
+      <div class="alert alert-warning" style="margin-bottom:16px;">
+        ⚠️ As entradas lançadas no extrato (${formatMoeda(r.totalEntradas)}) ${divergencia > 0 ? 'estão abaixo' : 'ultrapassam'} o valor total repassado + contrapartida (${formatMoeda(r.valorTotal)}) em ${formatMoeda(Math.abs(divergencia))}. Confira se falta lançar alguma parcela ou se há um lançamento duplicado/incorreto.
+      </div>
+    ` : ''}
+
+    <div style="margin-bottom:20px;">
+      <div class="card-title" style="font-size:15px;">Lançar Extrato Mensal</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Mês <span class="required">*</span></label><input class="form-input" type="month" id="ex_mes" /></div>
         <div class="form-group"><label class="form-label">Entradas (R$)</label><input class="form-input" id="ex_entradas" oninput="mascararValor(this)" inputmode="numeric" /></div>
+        <div class="form-group"><label class="form-label">Categoria (Entrada)</label>
+          <select class="form-input" id="ex_cat_entrada">
+            <option value="">Selecione…</option>
+            ${CATEGORIAS_ENTRADA_EXTRATO.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">Saídas (R$)</label><input class="form-input" id="ex_saidas" oninput="mascararValor(this)" inputmode="numeric" /></div>
+        <div class="form-group"><label class="form-label">Categoria (Saída)</label>
+          <select class="form-input" id="ex_cat_saida">
+            <option value="">Selecione…</option>
+            ${CATEGORIAS_SAIDA_EXTRATO.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="ex_obs" /></div>
         <div class="form-group"><label class="form-label">Anexo</label><input class="form-input" type="file" id="ex_anexo" accept=".pdf,.jpg,.jpeg,.png" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="lancarExtrato()">+ Lançar</button>
       </div>
     </div>
-    ${fin.extratos && fin.extratos.length > 0 ? `
-      <div class="table-wrapper">
-        <table>
-          <thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo do Mês</th><th>Obs</th><th>Anexo</th><th></th></tr></thead>
-          <tbody>
-            ${fin.extratos.sort((a, b) => a.mes.localeCompare(b.mes)).map(e => `
+    ${fin.extratos && fin.extratos.length > 0 ? (() => {
+      const ordenados = [...fin.extratos].sort((a, b) => a.mes.localeCompare(b.mes));
+      let acumulado = 0;
+      const linhas = ordenados.map(e => {
+        acumulado += (e.entradas || 0) - (e.saidas || 0);
+        const catEntradaLabel = e.categoriaEntrada ? (CATEGORIAS_ENTRADA_EXTRATO.find(t => t.id === e.categoriaEntrada) || {}).label : '';
+        const catSaidaLabel = e.categoriaSaida ? (CATEGORIAS_SAIDA_EXTRATO.find(t => t.id === e.categoriaSaida) || {}).label : '';
+        return `
               <tr>
                 <td><strong>${formatMes(e.mes)}</strong></td>
-                <td class="font-mono" style="color:var(--green-600);">${formatMoeda(e.entradas)}</td>
-                <td class="font-mono" style="color:var(--danger);">${formatMoeda(e.saidas)}</td>
-                <td class="font-mono">${formatMoeda(e.entradas - e.saidas)}</td>
+                <td class="font-mono" style="color:var(--green-600);">
+                  ${formatMoeda(e.entradas)}
+                  ${catEntradaLabel ? `<div style="font-size:10px;color:var(--gray-500);">${escapeHtml(catEntradaLabel)}</div>` : ''}
+                </td>
+                <td class="font-mono" style="color:var(--danger);">
+                  ${formatMoeda(e.saidas)}
+                  ${catSaidaLabel ? `<div style="font-size:10px;color:var(--gray-500);">${escapeHtml(catSaidaLabel)}</div>` : ''}
+                </td>
+                <td class="font-mono">${formatMoeda(acumulado)}</td>
                 <td>${escapeHtml(e.obs || '—')}</td>
                 <td>
                   ${(e.anexos || []).length > 0
@@ -3008,13 +3079,18 @@ function renderExtratos(c) {
                     : '<span style="color:var(--gray-400);font-size:13px;">—</span>'}
                 </td>
                 <td><button class="btn btn-ghost btn-sm" onclick="removerExtrato('${e.id}')">Remover</button></td>
-              </tr>
-            `).join('')}
-          </tbody>
+              </tr>`;
+      }).join('');
+      return `
+      <div class="table-wrapper">
+        <table>
+          <thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo Acumulado</th><th>Obs</th><th>Anexo</th><th></th></tr></thead>
+          <tbody>${linhas}</tbody>
         </table>
       </div>
       <div id="extratoAnexosContainer"></div>
-    ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum lançamento de extrato.</div>'}
+      `;
+    })() : '<div class="empty-state text-sm" style="padding:30px;">Nenhum lançamento de extrato.</div>'}
   `;
 }
 
