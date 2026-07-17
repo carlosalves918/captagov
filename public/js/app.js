@@ -660,8 +660,9 @@ function salvarConvenio() {
       };
     }
     salvarEstado();
-    STATE.cadastroMensagem = '<div class="alert alert-success">Convênio salvo às ' + new Date().toLocaleTimeString('pt-BR') + '</div>';
+    STATE.cadastroMensagem = '<div class="alert alert-success">Alterações salvas! Voltando ao Painel...</div>';
     renderTudo();
+    setTimeout(() => { STATE.cadastroMensagem = null; toastSucesso('Convênio atualizado.'); mudarView('painel'); }, 900);
   } else {
     const novoId = gerarId('c');
     const novo = {
@@ -678,7 +679,7 @@ function salvarConvenio() {
     salvarEstado();
     STATE.cadastroMensagem = '<div class="alert alert-success">Cadastrado com sucesso! Voltando ao Painel...</div>';
     renderTudo();
-    setTimeout(() => { STATE.cadastroMensagem = null; mudarView('painel'); }, 900);
+    setTimeout(() => { STATE.cadastroMensagem = null; toastSucesso('Convênio cadastrado.'); mudarView('painel'); }, 900);
   }
 }
 
@@ -801,8 +802,10 @@ function salvarEmenda() {
   }
 
   persistirEmenda(idPersistir); // usa o id certo mesmo quando é registro novo (emendaEditandoId ainda não existia)
+  STATE.emendaEditandoId = null;
   limparFormEmenda();
-  nota.innerHTML = '<div class="alert alert-success">Emenda salva às ' + new Date().toLocaleTimeString('pt-BR') + '</div>';
+  mudarSubView('lista');
+  toastSucesso('Emenda salva.');
 }
 
 function excluirEmenda(id) {
@@ -1419,6 +1422,7 @@ function adicionarContratada() {
       });
     }
 
+    const eraEdicao = !!STATE.contratadaEditandoId;
     if (STATE.contratadaEditandoId) {
       const ct = c.financeiro.contratadas.find(x => x.id === STATE.contratadaEditandoId);
       if (ct) {
@@ -1462,6 +1466,7 @@ function adicionarContratada() {
     }
 
     salvarEstado();
+    toastSucesso(eraEdicao ? 'Contratada atualizada.' : 'Contratada cadastrada.');
     renderFinanceiro();
   };
 
@@ -1520,6 +1525,7 @@ async function registrarPagamento() {
     obs: document.getElementById('pg_obs')?.value || '',
   });
   salvarEstado();
+  toastSucesso('Pagamento registrado.');
   renderFinanceiro();
 }
 
@@ -1541,6 +1547,7 @@ function togglePagamentoStatus(id) {
   if (!pg.historico) pg.historico = [];
   pg.historico.push({ status: pg.status, quando: new Date().toISOString() });
   salvarEstado();
+  toastSucesso(pg.status === 'fechado' ? 'Pagamento fechado.' : 'Pagamento reaberto.');
   renderFinanceiro();
 }
 
@@ -1673,6 +1680,7 @@ async function lancarExtrato() {
     anexos: anexos,
   });
   salvarEstado();
+  toastSucesso('Extrato lançado.');
   renderFinanceiro();
 }
 
@@ -1699,6 +1707,7 @@ async function lancarRendimento() {
     anexos: anexos,
   });
   salvarEstado();
+  toastSucesso('Rendimento lançado.');
   renderFinanceiro();
 }
 
@@ -1834,6 +1843,7 @@ function adicionarDocExtra() {
       status: file ? 'anexado' : 'solicitado',
     });
     salvarEstado();
+    toastSucesso('Documento registrado.');
     renderFinanceiro();
   };
 
