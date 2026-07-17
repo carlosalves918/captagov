@@ -606,6 +606,27 @@ function editarConvenio(id) {
   });
 }
 
+// Mostra um erro/aviso no formulário de cadastro do convênio SEM
+// re-renderizar a tela inteira — se chamássemos renderTudo() aqui, o
+// innerHTML do formulário seria reconstruído do zero e tudo que a pessoa já
+// tinha digitado (campos sem erro incluídos) seria perdido. Escrever direto
+// no #savedNote preserva o DOM (e os valores) intactos.
+function exibirAlertaCadastro(html) {
+  const nota = document.getElementById('savedNote');
+  if (nota) { nota.innerHTML = html; nota.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  else { STATE.cadastroMensagem = html; renderTudo(); } // fallback defensivo, caso a tela não esteja montada
+}
+
+// Marca visualmente (borda vermelha) os campos com erro, e limpa marcações
+// de uma tentativa anterior — assim só os campos que ainda faltam ficam
+// destacados, sem acumular de submit em submit.
+function destacarCamposComErro(idsComErro) {
+  document.querySelectorAll('.form-input.input-error').forEach(el => el.classList.remove('input-error'));
+  idsComErro.forEach(id => document.getElementById(id)?.classList.add('input-error'));
+  const primeiro = idsComErro[0] && document.getElementById(idsComErro[0]);
+  if (primeiro) primeiro.focus();
+}
+
 function salvarConvenio() {
   if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
   const form = getFormData();
@@ -613,24 +634,25 @@ function salvarConvenio() {
   const faltando = obrigatorios.filter(id => !form[id] || !form[id].trim());
 
   if (faltando.length) {
-    STATE.cadastroMensagem = '<div class="alert alert-warning">Preencha os campos obrigatórios: ' + faltando.map(id => document.getElementById(id)?.closest('.form-group')?.querySelector('.form-label')?.textContent || id).join(', ') + '.</div>';
-    renderTudo();
+    destacarCamposComErro(faltando);
+    exibirAlertaCadastro('<div class="alert alert-warning">Preencha os campos obrigatórios: ' + faltando.map(id => document.getElementById(id)?.closest('.form-group')?.querySelector('.form-label')?.textContent || id).join(', ') + '. Os dados já preenchidos foram mantidos.</div>');
     return;
   }
+  destacarCamposComErro([]); // passou na validação de obrigatórios — limpa marcações de uma tentativa anterior
 
   const dataInicio = form.c_data_inicio;
   const dataFim = form.c_data_fim;
   if (dataInicio && dataFim && new Date(dataFim) < new Date(dataInicio)) {
-    STATE.cadastroMensagem = '<div class="alert alert-danger">A data de fim não pode ser anterior à data de início.</div>';
-    renderTudo();
+    destacarCamposComErro(['c_data_inicio', 'c_data_fim']);
+    exibirAlertaCadastro('<div class="alert alert-danger">A data de fim não pode ser anterior à data de início. Os dados já preenchidos foram mantidos.</div>');
     return;
   }
 
   // Validação de CNPJ/CPF (dígito verificador) — antes só a máscara visual era checada.
   const docCheck = validarCpfOuCnpj(form.c_cnpj);
   if (form.c_cnpj && !docCheck.valido) {
-    STATE.cadastroMensagem = '<div class="alert alert-danger">CNPJ/CPF do conveniente parece inválido. Confira os dígitos e tente novamente.</div>';
-    renderTudo();
+    destacarCamposComErro(['c_cnpj']);
+    exibirAlertaCadastro('<div class="alert alert-danger">CNPJ/CPF do conveniente parece inválido. Confira os dígitos e tente novamente. Os dados já preenchidos foram mantidos.</div>');
     return;
   }
 

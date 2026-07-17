@@ -596,6 +596,15 @@ tbody tr:last-child td {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
+.form-input.input-error {
+  border-color: var(--danger);
+  background: var(--danger-light);
+}
+
+.form-input.input-error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
 .form-input::placeholder {
   color: var(--gray-400);
 }
