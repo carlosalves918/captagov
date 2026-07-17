@@ -187,25 +187,113 @@ function recalcularContratada(ct) {
     : (ct.dataFimVigenciaOriginal || '');
 }
 
-// Propaga a vigência das contratadas para o CONVÊNIO. O convênio guarda uma
-// data-base (dataFimOriginal, sincronizada sempre que o cadastro é salvo) e
-// aqui pegamos a data mais distante entre essa base e a vigência atual de
-// cada contratada — assim, um aditivo de prazo que posterga o contrato de
-// uma empresa também "puxa" a vigência do convênio (e o prazo de PC, que
-// depende dela) para frente. Só estica pra frente, nunca encurta sozinho.
+// Propaga a vigência das contratadas para o CONVÊNIO, depois de já ter
+// aplicado os aditivos de prazo do próprio convênio (ver
+// recalcularAditivosConvenio, logo abaixo). Um aditivo de prazo de uma
+// contratada só "puxa" a vigência do convênio pra frente, nunca encurta
+// sozinho — mas o aditivo do próprio convênio pode corrigir/definir a data
+// diretamente, já que é o documento oficial em si.
 function recalcularVigenciaConvenio(c) {
   if (!c) return;
-  if (!c.dataFimOriginal) c.dataFimOriginal = c.dataFim || '';
+  recalcularAditivosConvenio(c);
   const datasContratadas = (c.financeiro?.contratadas || [])
     .map(ct => ct.dataFimVigencia)
     .filter(Boolean);
-  const todasDatas = [c.dataFimOriginal, ...datasContratadas].filter(Boolean);
+  const todasDatas = [c.dataFim, ...datasContratadas].filter(Boolean);
   if (!todasDatas.length) return;
   const maisRecente = todasDatas.reduce((max, d) => (!max || new Date(d + 'T00:00:00') > new Date(max + 'T00:00:00')) ? d : max, null);
   if (maisRecente && maisRecente !== c.dataFim) {
     c.dataFim = maisRecente;
     c.prazoLimitePC = calcularPrazoPC(c.dataFim, c.prazoPC || '60');
   }
+}
+
+// ==================== ADITIVO DE PRAZO DO CONVÊNIO ====================
+// Diferente do aditivo de CONTRATO (acima, por contratada), este é o termo
+// aditivo do próprio instrumento — o convênio firmado com o órgão
+// concedente. Prorroga a vigência oficial do convênio (e, junto com ela, o
+// prazo de prestação de contas, que é calculado a partir dela).
+function garantirCamposAditivoConvenio(c) {
+  if (!c.aditivosConvenio) c.aditivosConvenio = [];
+  if (!c.dataFimOriginal) c.dataFimOriginal = c.dataFim || '';
+  return c;
+}
+
+// Recalcula c.dataFim e c.prazoLimitePC a partir da data-base original do
+// convênio (dataFimOriginal) somada ao histórico de aditivos de prazo —
+// mesmo princípio do recalcularContratada: sempre reconstrói do zero a
+// partir do último aditivo, o que torna a remoção de um aditivo segura.
+function recalcularAditivosConvenio(c) {
+  garantirCamposAditivoConvenio(c);
+  const ordenados = c.aditivosConvenio
+    .filter(a => a.novaDataFim)
+    .sort((a, b) => (a.criadoEm || 0) - (b.criadoEm || 0));
+  c.dataFim = ordenados.length ? ordenados[ordenados.length - 1].novaDataFim : c.dataFimOriginal;
+  c.prazoLimitePC = calcularPrazoPC(c.dataFim, c.prazoPC || '60');
+}
+
+async function adicionarAditivoConvenio() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  garantirCamposAditivoConvenio(c);
+
+  const numero = document.getElementById('adc_numero')?.value.trim() || '';
+  const dataAssinatura = document.getElementById('adc_data')?.value || '';
+  const novaDataFim = document.getElementById('adc_novaDataFim')?.value || '';
+  const justificativa = document.getElementById('adc_justificativa')?.value.trim() || '';
+
+  if (!numero) { toastAviso('Informe o número do aditivo.'); return; }
+  if (!dataAssinatura) { toastAviso('Informe a data de assinatura do aditivo.'); return; }
+  if (!novaDataFim) { toastAviso('Informe a nova data de vigência.'); return; }
+  const dataFimAnterior = c.dataFim || c.dataFimOriginal || '';
+  if (new Date(novaDataFim + 'T00:00:00') <= new Date((dataFimAnterior || novaDataFim) + 'T00:00:00') && dataFimAnterior) {
+    if (!confirm('A nova data (' + formatData(novaDataFim) + ') não é posterior à vigência atual (' + formatData(dataFimAnterior) + '). Confirma mesmo assim?')) return;
+  }
+
+  const fileInput = document.getElementById('adc_anexo');
+  const file = fileInput?.files?.[0];
+  let arquivo = null;
+  let arquivoDataUrl = null;
+  if (file) {
+    arquivo = file.name;
+    try {
+      arquivoDataUrl = await lerArquivoComoDataUrl(file);
+    } catch (e) {
+      console.error('Erro ao ler anexo do aditivo de prazo:', e);
+    }
+  }
+
+  c.aditivosConvenio.push({
+    id: gerarId('adc'),
+    numero,
+    dataAssinatura,
+    justificativa,
+    dataFimAnterior,
+    novaDataFim,
+    arquivo,
+    arquivoDataUrl,
+    criadoEm: Date.now(),
+  });
+
+  recalcularVigenciaConvenio(c);
+  salvarEstado();
+  toastSucesso('Aditivo de prazo nº ' + numero + ' registrado — vigência do convênio prorrogada para ' + formatData(c.dataFim) + '.');
+  renderFinanceiro();
+}
+
+function removerAditivoConvenio(aditivoId) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  garantirCamposAditivoConvenio(c);
+  const ad = c.aditivosConvenio.find(a => a.id === aditivoId);
+  if (!ad) return;
+  if (!confirm('Remover o Aditivo de Prazo nº ' + (ad.numero || '?') + '? A vigência do convênio será recalculada sem ele.')) return;
+  c.aditivosConvenio = c.aditivosConvenio.filter(a => a.id !== aditivoId);
+  recalcularVigenciaConvenio(c);
+  salvarEstado();
+  renderFinanceiro();
 }
 
 function toggleAditivos(ctId) {
@@ -359,6 +447,7 @@ async function carregarEstado() {
   if (p.subView) STATE.subView = p.subView;
   STATE.convenios.forEach(c => {
     (c.documentosExtras || []).forEach(doc => { if (!doc.status) doc.status = doc.anexado ? 'anexado' : 'solicitado'; });
+    garantirCamposAditivoConvenio(c);
   });
 }
 
@@ -2318,6 +2407,7 @@ function renderPrestacaoContas() {
 
   const resumo = calcularResumoFinanceiro(c.id);
   const subTabs = [
+    { id: 'vigencia', label: 'Vigência do Convênio' },
     { id: 'contratadas', label: 'Contratadas' },
     { id: 'pagamentos', label: 'Pagamentos' },
     { id: 'extratos', label: 'Extratos' },
@@ -2371,6 +2461,7 @@ function renderPrestacaoContas() {
 
 function renderSubPrestacaoContas(c, resumo) {
   switch (STATE.subView) {
+    case 'vigencia': return renderVigenciaConvenio(c);
     case 'contratadas': return renderContratadas(c);
     case 'pagamentos': return renderPagamentos(c, resumo);
     case 'extratos': return renderExtratos(c);
@@ -2384,6 +2475,95 @@ function renderSubPrestacaoContas(c, resumo) {
 // Alias para compatibilidade (chamado por registrarPagamento, lancarExtrato, etc.)
 function renderFinanceiro() {
   renderTudo();
+}
+
+function renderVigenciaConvenio(c) {
+  garantirCamposAditivoConvenio(c);
+  const aditivos = [...c.aditivosConvenio].sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+  const vig = statusVigencia(c);
+  const houveAditivo = aditivos.length > 0;
+
+  return `
+    <div style="margin-bottom:20px;">
+      <div class="card-title" style="font-size:16px;">Vigência do Convênio</div>
+      <div class="card-subtitle">
+        Termo aditivo de prazo firmado com o órgão concedente — prorroga a vigência oficial do convênio (nº ${escapeHtml(c.numero || '—')})
+        e, junto com ela, o prazo de prestação de contas. Não confundir com os aditivos de <em>contrato</em> das contratadas, que ficam na aba "Contratadas".
+      </div>
+
+      <div class="fin-summary-grid" style="margin-top:12px;">
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Assinatura do Convênio</div>
+          <div class="fin-summary-value neutral">${c.dataAssinatura ? formatData(c.dataAssinatura) : '—'}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Vigência Original</div>
+          <div class="fin-summary-value neutral">${c.dataFimOriginal ? formatData(c.dataFimOriginal) : '—'}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Vigência Atual</div>
+          <div class="fin-summary-value ${houveAditivo ? 'positive' : 'neutral'}">${c.dataFim ? formatData(c.dataFim) : '—'}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Prazo Limite p/ PC</div>
+          <div class="fin-summary-value neutral">${c.prazoLimitePC ? formatData(c.prazoLimitePC) : '—'}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <span class="badge ${vig.cls}">${vig.label}</span>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--gray-200);padding-top:16px;">
+      <div style="font-size:13px;color:var(--navy-900);font-weight:600;margin-bottom:12px;">+ Registrar Aditivo de Prazo</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;align-items:end;">
+        <div class="form-group">
+          <label class="form-label">Nº do Aditivo <span class="required">*</span></label>
+          <input class="form-input" id="adc_numero" placeholder="Ex: 1º Termo Aditivo" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data de Assinatura <span class="required">*</span></label>
+          <input class="form-input" type="date" id="adc_data" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nova Data de Vigência Final <span class="required">*</span></label>
+          <input class="form-input" type="date" id="adc_novaDataFim" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Anexo do Termo Aditivo</label>
+          <input class="form-input" type="file" id="adc_anexo" accept=".pdf,.jpg,.jpeg,.png" />
+        </div>
+        <button class="btn btn-primary" style="height:42px;" onclick="adicionarAditivoConvenio()">+ Registrar</button>
+      </div>
+      <div class="form-group" style="margin-top:10px;max-width:700px;">
+        <label class="form-label">Justificativa</label>
+        <input class="form-input" id="adc_justificativa" placeholder="Motivo da prorrogação (opcional)" />
+      </div>
+    </div>
+
+    ${aditivos.length > 0 ? `
+      <div class="table-wrapper" style="margin-top:20px;">
+        <table class="table-comfortable">
+          <thead><tr><th>Nº</th><th>Assinatura</th><th>Vigência Anterior</th><th>Nova Vigência</th><th>Justificativa</th><th>Anexo</th><th></th></tr></thead>
+          <tbody>
+            ${aditivos.map(a => `
+              <tr>
+                <td><strong>${escapeHtml(a.numero)}</strong></td>
+                <td style="white-space:nowrap;">${a.dataAssinatura ? formatData(a.dataAssinatura) : '—'}</td>
+                <td style="white-space:nowrap;">${a.dataFimAnterior ? formatData(a.dataFimAnterior) : '—'}</td>
+                <td style="white-space:nowrap;"><strong>${a.novaDataFim ? formatData(a.novaDataFim) : '—'}</strong></td>
+                <td class="td-truncate" title="${escapeHtml(a.justificativa || '')}">${escapeHtml(a.justificativa || '—')}</td>
+                <td>${a.arquivo && a.arquivoDataUrl
+                  ? `<a href="${a.arquivoDataUrl}" download="${escapeHtml(a.arquivo)}" class="btn btn-ghost btn-sm td-truncate" title="${escapeHtml(a.arquivo)}">📎</a>`
+                  : '<span style="font-size:10px;color:var(--gray-400);">—</span>'}</td>
+                <td><button class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerAditivoConvenio('${a.id}')">Remover</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    ` : '<div class="empty-state text-sm" style="padding:16px 0;">Nenhum aditivo de prazo registrado para este convênio ainda — a vigência em uso é a original do cadastro.</div>'}
+  `;
 }
 
 function renderContratadas(c) {
@@ -4659,7 +4839,7 @@ async function gerarPDFRelatorioGeral() {
 // template string com onclick="nomeDaFuncao(...)", então cada função
 // chamada dessa forma precisa ser atribuída a window explicitamente.
 Object.assign(window, {
-  abrirAditivoAqui, abrirAditivoDireto, abrirPrestacaoContas, abrirTelaBackups, adicionarAditivo, adicionarContratada, adicionarDocExtra, anexarDocExtra,
+  abrirAditivoAqui, abrirAditivoDireto, abrirPrestacaoContas, abrirTelaBackups, adicionarAditivo, adicionarAditivoConvenio, adicionarContratada, adicionarDocExtra, anexarDocExtra,
   anexarDocPagamento, aprovarDocumentoSalvo, atualizarCamposAditivo, baixarDocumentoGerado, baixarDocumentoSalvo, cancelarEdicaoContratada,
   copiarDocumentoGerado, duplicarConvenio, editarContratada, editarConvenio,
   editarDocumentoSalvo, editarEmenda, editarInstituicao, editarProponente, editarResponsavelTecnico, editarUsuario,
@@ -4670,7 +4850,7 @@ Object.assign(window, {
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
   mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
   registrarPagamento,
-  removerAditivo, removerAnexoExtrato, removerAnexoRendimento, removerContratada,
+  removerAditivo, removerAditivoConvenio, removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerDocumentoSalvo, removerExtrato, removerPagamento,
   removerRendimento, renderTudo, renderBody, restaurarSnapshotAuto, excluirSnapshotAuto,
   reverterDocumentoSalvo, salvarConvenio, salvarDocumentoGerado, salvarEmenda, salvarInstituicao, salvarProponente,
