@@ -426,8 +426,39 @@ function calcularResumoFinanceiro(id) {
   // (saldoTotal, que reflete o valor total repassado/contrapartida menos o
   // que já saiu). Só faz sentido quando há contratada(s) cadastrada(s).
   const saldoContrato = totalContratado > 0 ? (totalContratado - totalPago) : null;
-  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, fin: f };
+  const rendimentoMedioMensal = (f.rendimentos && f.rendimentos.length) ? totalRendimento / f.rendimentos.length : 0;
+  const mesesSemRendimento = calcularMesesSemLancamento(c, f.rendimentos || []);
+  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, rendimentoMedioMensal, mesesSemRendimento, fin: f };
 }
+
+// Compara os meses da vigência do convênio (dataInicio -> dataFim, limitado a
+// hoje) com os meses em que há lançamento de rendimento, e retorna a lista
+// de meses (YYYY-MM) sem lançamento. Usado para alertar sobre lacunas antes
+// que um auditor as encontre.
+function calcularMesesSemLancamento(c, rendimentos) {
+  if (!c.dataInicio || !c.dataFim) return [];
+  const inicio = new Date(c.dataInicio + 'T00:00:00');
+  const fimVigencia = new Date(c.dataFim + 'T00:00:00');
+  const hoje = new Date();
+  const fim = fimVigencia < hoje ? fimVigencia : hoje;
+  if (isNaN(inicio.getTime()) || isNaN(fim.getTime()) || fim < inicio) return [];
+  const lancados = new Set((rendimentos || []).map(r => r.mes).filter(Boolean));
+  const faltando = [];
+  const cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  const limite = new Date(fim.getFullYear(), fim.getMonth(), 1);
+  while (cursor <= limite) {
+    const mesStr = cursor.getFullYear() + '-' + String(cursor.getMonth() + 1).padStart(2, '0');
+    if (!lancados.has(mesStr)) faltando.push(mesStr);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return faltando;
+}
+
+const TIPOS_APLICACAO_RENDIMENTO = [
+  { id: 'poupanca', label: 'Poupança' },
+  { id: 'fundo_automatico', label: 'Fundo de Aplicação Automática' },
+  { id: 'outro', label: 'Outro' },
+];
 
 async function carregarEstado() {
   const p = await carregarEstadoDb();
@@ -1720,11 +1751,20 @@ async function lancarRendimento() {
       await lerArquivoComoDataUrl(file).then(dataUrl => { anexos[anexos.length - 1].dataUrl = dataUrl; });
     }
   }
+  const aplicado = parseMoeda(document.getElementById('rd_aplicado')?.value || '0');
+  const rendimento = parseMoeda(document.getElementById('rd_rendimento')?.value || '0');
+  const taxaDigitada = document.getElementById('rd_taxa')?.value || '';
+  const taxa = taxaDigitada
+    ? parseFloat(String(taxaDigitada).replace(',', '.')) || 0
+    : (aplicado > 0 ? (rendimento / aplicado) * 100 : 0);
   c.financeiro.rendimentos.push({
     id: gerarId('rd'),
     mes: document.getElementById('rd_mes')?.value || '',
-    aplicado: parseMoeda(document.getElementById('rd_aplicado')?.value || '0'),
-    rendimento: parseMoeda(document.getElementById('rd_rendimento')?.value || '0'),
+    aplicado: aplicado,
+    rendimento: rendimento,
+    instituicao: document.getElementById('rd_instituicao')?.value || '',
+    tipoAplicacao: document.getElementById('rd_tipo')?.value || '',
+    taxa: taxa,
     obs: document.getElementById('rd_obs')?.value || '',
     anexos: anexos,
   });
@@ -2497,7 +2537,7 @@ function renderSubPrestacaoContas(c, resumo) {
     case 'contratadas': return renderContratadas(c);
     case 'pagamentos': return renderPagamentos(c, resumo);
     case 'extratos': return renderExtratos(c);
-    case 'rendimentos': return renderRendimentos(c);
+    case 'rendimentos': return renderRendimentos(c, resumo);
     case 'aditivos': return renderExtratoAditivos(c);
     case 'docs': return renderDocs();
     default: return '';
@@ -2978,15 +3018,55 @@ function renderExtratos(c) {
   `;
 }
 
-function renderRendimentos(c) {
+function renderRendimentos(c, resumo) {
   const fin = c.financeiro;
+  const r = resumo || calcularResumoFinanceiro(c.id) || {};
+  const mesesFaltando = r.mesesSemRendimento || [];
   return `
     <div style="margin-bottom:20px;">
-      <div class="card-title" style="font-size:16px;">Lançar Rendimento</div>
+      <div class="card-title" style="font-size:16px;">Rendimentos de Aplicação Financeira</div>
+      <div class="card-subtitle">Rendimento de poupança/fundo automático sobre o recurso ainda não utilizado. O saldo de rendimento disponível entra no cálculo do saldo total do convênio — o valor "Aplicado" é apenas informativo (não afeta o saldo).</div>
+
+      <div class="fin-summary-grid" style="margin-top:12px;">
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Rendimento Acumulado</div>
+          <div class="fin-summary-value positive">${formatMoeda(r.totalRendimento)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Saldo de Rendimento Disponível</div>
+          <div class="fin-summary-value ${(r.saldoRendimento || 0) >= 0 ? 'positive' : 'negative'}">${formatMoeda(r.saldoRendimento)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Rendimento Médio Mensal</div>
+          <div class="fin-summary-value neutral">${formatMoeda(r.rendimentoMedioMensal)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Meses sem Lançamento</div>
+          <div class="fin-summary-value ${mesesFaltando.length ? 'negative' : ''}">${mesesFaltando.length}</div>
+        </div>
+      </div>
+    </div>
+
+    ${mesesFaltando.length > 0 ? `
+      <div class="alert alert-warning" style="margin-bottom:16px;">
+        ⚠️ ${mesesFaltando.length} mês(es) dentro da vigência sem lançamento de rendimento: ${mesesFaltando.map(m => formatMes(m)).join(', ')}.
+      </div>
+    ` : ''}
+
+    <div style="margin-bottom:20px;">
+      <div class="card-title" style="font-size:15px;">Lançar Rendimento</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Mês <span class="required">*</span></label><input class="form-input" type="month" id="rd_mes" /></div>
+        <div class="form-group"><label class="form-label">Instituição Financeira</label><input class="form-input" id="rd_instituicao" placeholder="Ex: Banco do Brasil" /></div>
+        <div class="form-group"><label class="form-label">Tipo de Aplicação</label>
+          <select class="form-input" id="rd_tipo">
+            <option value="">Selecione…</option>
+            ${TIPOS_APLICACAO_RENDIMENTO.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">Aplicado (R$)</label><input class="form-input" id="rd_aplicado" oninput="mascararValor(this)" inputmode="numeric" /></div>
         <div class="form-group"><label class="form-label">Rendimento (R$)</label><input class="form-input" id="rd_rendimento" oninput="mascararValor(this)" inputmode="numeric" /></div>
+        <div class="form-group"><label class="form-label">Taxa (%)</label><input class="form-input" id="rd_taxa" placeholder="auto, se em branco" inputmode="decimal" /></div>
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="rd_obs" /></div>
         <div class="form-group"><label class="form-label">Anexo</label><input class="form-input" type="file" id="rd_anexo" accept=".pdf,.jpg,.jpeg,.png" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="lancarRendimento()">+ Lançar</button>
@@ -2995,13 +3075,18 @@ function renderRendimentos(c) {
     ${fin.rendimentos && fin.rendimentos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Mês</th><th>Aplicado</th><th>Rendimento</th><th>Obs</th><th>Anexo</th><th></th></tr></thead>
+          <thead><tr><th>Mês</th><th>Instituição / Tipo</th><th>Aplicado</th><th>Rendimento</th><th>Taxa</th><th>Obs</th><th>Anexo</th><th></th></tr></thead>
           <tbody>
             ${fin.rendimentos.sort((a, b) => a.mes.localeCompare(b.mes)).map(r => `
               <tr>
                 <td><strong>${formatMes(r.mes)}</strong></td>
+                <td>
+                  ${r.instituicao ? escapeHtml(r.instituicao) : '<span style="color:var(--gray-400);">—</span>'}
+                  ${r.tipoAplicacao ? `<div style="font-size:10px;color:var(--gray-500);">${escapeHtml((TIPOS_APLICACAO_RENDIMENTO.find(t => t.id === r.tipoAplicacao) || {}).label || r.tipoAplicacao)}</div>` : ''}
+                </td>
                 <td class="font-mono">${formatMoeda(r.aplicado)}</td>
                 <td class="font-mono" style="color:var(--green-600);">${formatMoeda(r.rendimento)}</td>
+                <td class="font-mono">${r.taxa ? r.taxa.toFixed(2).replace('.', ',') + '%' : '—'}</td>
                 <td>${escapeHtml(r.obs || '—')}</td>
                 <td>
                   ${(r.anexos || []).length > 0
