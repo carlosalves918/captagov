@@ -19,7 +19,8 @@ import {
   salvarIdentidadeVisualDb,
 } from './db.js';
 import { toastSucesso, toastErro, toastAviso } from './toast.js';
-import { gerarDocumentoAutomatico, gerarModeloEsqueleto, TIPOS_COM_AUTOPREENCHIMENTO } from './features/justificativa.js';
+import { gerarDocumentoAutomatico, gerarModeloEsqueleto } from './features/justificativa.js';
+import { CAMPOS_DOC, valoresAutomaticos, linhaListaVazia, montarDocumentoFinal } from './features/documentosForm.js';
 
 // ==================== ESTADO GLOBAL ====================
 const STATE = {
@@ -56,6 +57,9 @@ const STATE = {
   docGeradoTexto: null,
   docGeradoEhModelo: false,
   docEditandoId: null,
+  docFormTipo: null,
+  docFormValues: {},
+  docFormListas: {},
   pagamentoDocsAbertoId: null,
 };
 
@@ -592,7 +596,7 @@ function mudarView(view) {
   else if (view === 'usuarios') STATE.subView = 'lista';
   else if (view === 'relatorios') STATE.subView = 'contratadas';
   if (view !== 'cadastro') STATE.cadastroMensagem = null;
-  if (view !== 'documentos') { STATE.docGeradoTipo = null; STATE.docGeradoTexto = null; }
+  if (view !== 'documentos') { STATE.docGeradoTipo = null; STATE.docGeradoTexto = null; STATE.docFormTipo = null; }
   persistirMeta();
   renderTudo();
 }
@@ -3381,10 +3385,100 @@ function gerarDocumento(tipoId) {
   if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
   const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
   const usuario = STATE.usuarios.find(x => x.id === STATE.usuarioSelecionadoId) || null;
-  const auto = gerarDocumentoAutomatico(tipoId, c, rt, usuario);
+
+  const campos = CAMPOS_DOC[tipoId] || [];
+  STATE.docFormTipo = tipoId;
+  STATE.docFormValues = valoresAutomaticos(tipoId, c, rt, usuario);
+  STATE.docFormListas = {};
+  campos.filter(cp => cp.tipo === 'lista').forEach(cp => {
+    STATE.docFormListas[cp.id] = [linhaListaVazia(cp)];
+  });
+  STATE.docGeradoTipo = null;
+  STATE.docGeradoTexto = null;
+  STATE.docEditandoId = null;
+  renderTudo();
+}
+
+// Lê do DOM os valores atuais dos campos simples do formulário aberto e
+// grava em STATE.docFormValues — chamado antes de qualquer ação que force
+// um re-render (adicionar/remover linha de lista, ou finalizar o
+// formulário), pra ninguém perder o que já tinha digitado.
+function sincronizarCamposFormularioDoc(tipoId) {
+  const campos = CAMPOS_DOC[tipoId] || [];
+  campos.forEach(campo => {
+    if (campo.tipo === 'lista') return;
+    const el = document.getElementById('df_' + campo.id);
+    if (el) STATE.docFormValues[campo.id] = el.value;
+  });
+}
+
+// Mesma ideia, mas para as linhas já existentes de um campo tipo 'lista'.
+function sincronizarListaFormularioDoc(campoId, colunas) {
+  const linhas = STATE.docFormListas[campoId] || [];
+  linhas.forEach((linha, idx) => {
+    colunas.forEach(col => {
+      const el = document.getElementById(`dfl_${campoId}_${idx}_${col.id}`);
+      if (el) linha[col.id] = el.value;
+    });
+  });
+}
+
+function adicionarLinhaListaDoc(campoId) {
+  const campo = (CAMPOS_DOC[STATE.docFormTipo] || []).find(cp => cp.id === campoId);
+  if (!campo) return;
+  sincronizarCamposFormularioDoc(STATE.docFormTipo);
+  sincronizarListaFormularioDoc(campoId, campo.colunas);
+  STATE.docFormListas[campoId].push(linhaListaVazia(campo));
+  renderTudo();
+}
+
+function removerLinhaListaDoc(campoId, idx) {
+  const campo = (CAMPOS_DOC[STATE.docFormTipo] || []).find(cp => cp.id === campoId);
+  if (!campo) return;
+  sincronizarCamposFormularioDoc(STATE.docFormTipo);
+  sincronizarListaFormularioDoc(campoId, campo.colunas);
+  STATE.docFormListas[campoId].splice(idx, 1);
+  if (STATE.docFormListas[campoId].length === 0) STATE.docFormListas[campoId].push(linhaListaVazia(campo));
+  renderTudo();
+}
+
+function cancelarFormularioDocumento() {
+  STATE.docFormTipo = null;
+  STATE.docFormValues = {};
+  STATE.docFormListas = {};
+  renderTudo();
+}
+
+// Lê tudo que foi preenchido no formulário (campos simples + listas) e monta
+// o texto final do documento, entregando pro editor/preview de sempre
+// (textarea com Salvar/PDF/.txt) pra uma última revisão antes de salvar.
+function finalizarFormularioDocumento() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  const tipoId = STATE.docFormTipo;
+  const campos = CAMPOS_DOC[tipoId] || [];
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
+  const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
+  const usuario = STATE.usuarios.find(x => x.id === STATE.usuarioSelecionadoId) || null;
+
+  sincronizarCamposFormularioDoc(tipoId);
+  campos.filter(cp => cp.tipo === 'lista').forEach(cp => sincronizarListaFormularioDoc(cp.id, cp.colunas));
+
+  const faltando = campos.filter(cp => cp.obrigatorio && cp.tipo !== 'lista' && !(STATE.docFormValues[cp.id] || '').trim());
+  if (faltando.length > 0) {
+    toastAviso('Preencha o campo obrigatório: ' + faltando[0].label);
+    return;
+  }
+
+  const valores = { ...STATE.docFormValues, listas: STATE.docFormListas };
+  const texto = montarDocumentoFinal(tipoId, valores, c, rt, usuario);
+
   STATE.docGeradoTipo = tipoId;
-  STATE.docGeradoTexto = auto || gerarModeloEsqueleto(tipoId, c, rt, usuario) || '';
-  STATE.docGeradoEhModelo = !auto;
+  STATE.docGeradoTexto = texto;
+  STATE.docGeradoEhModelo = false;
+  STATE.docFormTipo = null;
+  STATE.docFormValues = {};
+  STATE.docFormListas = {};
   STATE.docEditandoId = null;
   renderTudo();
 }
@@ -3536,8 +3630,101 @@ function removerDocumentoSalvo(id) {
   renderTudo();
 }
 
+// Renderiza um campo simples do formulário (auto / texto / textarea / select / data).
+function renderCampoFormularioDoc(campo) {
+  const valorAtual = STATE.docFormValues[campo.id] ?? '';
+  const tagAuto = campo.tipo === 'auto' ? '<span class="badge badge-ok" style="margin-left:6px;font-size:10px;">🔄 automático — pode editar</span>' : '';
+  const obrigatorio = campo.obrigatorio ? ' <span class="required">*</span>' : '';
+  const wrapClass = (campo.tipo === 'textarea') ? 'form-group full-width' : 'form-group';
+
+  let campoHtml;
+  if (campo.tipo === 'select') {
+    campoHtml = `
+      <select class="form-input form-select" id="df_${campo.id}">
+        <option value="">— selecione —</option>
+        ${campo.opcoes.map(op => `<option value="${escapeHtml(op)}" ${valorAtual === op ? 'selected' : ''}>${escapeHtml(op)}</option>`).join('')}
+      </select>`;
+  } else if (campo.tipo === 'textarea') {
+    campoHtml = `<textarea class="form-input" id="df_${campo.id}" style="min-height:100px;" placeholder="${escapeHtml(campo.placeholder || '')}">${escapeHtml(valorAtual)}</textarea>`;
+  } else if (campo.tipo === 'data') {
+    campoHtml = `<input class="form-input" type="date" id="df_${campo.id}" value="${escapeHtml(valorAtual)}" />`;
+  } else {
+    // 'auto' e 'texto' usam o mesmo input simples
+    campoHtml = `<input class="form-input" type="text" id="df_${campo.id}" value="${escapeHtml(valorAtual)}" placeholder="${escapeHtml(campo.placeholder || '')}" />`;
+  }
+
+  return `
+    <div class="${wrapClass}">
+      <label class="form-label">${escapeHtml(campo.label)}${obrigatorio}${tagAuto}</label>
+      ${campoHtml}
+    </div>
+  `;
+}
+
+// Renderiza um campo tipo 'lista' (linhas repetíveis — Matriz de Risco, 5W2H).
+function renderListaFormularioDoc(campo) {
+  const linhas = STATE.docFormListas[campo.id] || [linhaListaVazia(campo)];
+  return `
+    <div class="form-group full-width">
+      <label class="form-label">${escapeHtml(campo.label)}</label>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;min-width:${campo.colunas.length * 160}px;">
+          <thead>
+            <tr>
+              ${campo.colunas.map(col => `<th style="text-align:left;font-size:12px;color:var(--gray-500);padding:6px 8px;border-bottom:1px solid var(--gray-200);">${escapeHtml(col.label)}</th>`).join('')}
+              <th style="width:36px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhas.map((linha, idx) => `
+              <tr>
+                ${campo.colunas.map(col => `
+                  <td style="padding:4px 8px;">
+                    ${col.tipo === 'select'
+                      ? `<select class="form-input form-select" id="dfl_${campo.id}_${idx}_${col.id}" style="min-width:130px;">
+                          <option value="">—</option>
+                          ${col.opcoes.map(op => `<option value="${escapeHtml(op)}" ${linha[col.id] === op ? 'selected' : ''}>${escapeHtml(op)}</option>`).join('')}
+                        </select>`
+                      : `<input class="form-input" type="text" id="dfl_${campo.id}_${idx}_${col.id}" value="${escapeHtml(linha[col.id] || '')}" placeholder="${escapeHtml(col.placeholder || '')}" style="min-width:150px;" />`}
+                  </td>
+                `).join('')}
+                <td style="text-align:center;">
+                  <button type="button" class="btn btn-ghost btn-sm" style="color:var(--danger);" onclick="removerLinhaListaDoc('${campo.id}', ${idx})" title="Remover linha">✕</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="adicionarLinhaListaDoc('${campo.id}')">+ Adicionar linha</button>
+    </div>
+  `;
+}
+
+// Tela do formulário de preenchimento por campos, exibida ao escolher um tipo
+// de documento — antes do texto final ser montado.
+function renderFormularioDocumento(tipoId) {
+  const tipo = TIPOS_DOC_IA.find(t => t.id === tipoId);
+  const campos = CAMPOS_DOC[tipoId] || [];
+  return `
+    <div class="card-title" style="font-size:16px;">${escapeHtml(tipo ? tipo.nome : 'Documento')}</div>
+    <div class="card-subtitle">Preencha os campos abaixo — o que está marcado como "automático" já veio dos dados do convênio, mas pode ser ajustado. No final, você ainda revisa o texto completo antes de salvar.</div>
+    <div class="form-grid" style="margin-top:16px;">
+      ${campos.map(campo => campo.tipo === 'lista' ? renderListaFormularioDoc(campo) : renderCampoFormularioDoc(campo)).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="finalizarFormularioDocumento()">Gerar documento →</button>
+      <button class="btn btn-ghost" onclick="cancelarFormularioDocumento()">Cancelar</button>
+    </div>
+  `;
+}
+
 function renderDocsIA() {
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+
+  if (STATE.docFormTipo) {
+    return renderFormularioDocumento(STATE.docFormTipo);
+  }
 
   if (STATE.docGeradoTipo) {
     const tipo = TIPOS_DOC_IA.find(t => t.id === STATE.docGeradoTipo);
@@ -3589,8 +3776,8 @@ function renderDocsIA() {
           <div style="font-size:24px;margin-bottom:8px;">📄</div>
           <div style="font-weight:600;font-size:14px;color:var(--navy-900);">${t.nome}</div>
           <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">${t.desc}</div>
-          <div style="font-size:11px;margin-top:8px;font-weight:600;color:${TIPOS_COM_AUTOPREENCHIMENTO.includes(t.id) ? 'var(--green-600)' : 'var(--gray-500)'};">
-            ${TIPOS_COM_AUTOPREENCHIMENTO.includes(t.id) ? '✓ Preenchimento automático' : '○ Modelo para preencher'}
+          <div style="font-size:11px;margin-top:8px;font-weight:600;color:var(--green-600);">
+            📝 Formulário guiado (${(CAMPOS_DOC[t.id] || []).length} campos)
           </div>
         </div>
       `).join('')}
@@ -5453,6 +5640,7 @@ Object.assign(window, {
   escapeHtml, excluirConvenio, excluirEmenda,
   excluirInstituicao, excluirProponente, excluirResponsavelTecnico, excluirUsuario, exportarAnexosZIP,
   exportarCSVFinanceiro, exportarDados, fecharDocumentoGerado, gerarDocumento,
+  adicionarLinhaListaDoc, removerLinhaListaDoc, cancelarFormularioDocumento, finalizarFormularioDocumento,
   gerarPDFRelatorio, gerarPDFRelatorioCompleto, gerarPDFRelatorioGeral, importarDados, lancarExtrato, lancarRendimento,
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
   mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
