@@ -33,6 +33,10 @@ export default function Document() {
           strategy="beforeInteractive"
         />
         <Script
+          src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"
+          strategy="beforeInteractive"
+        />
+        <Script
           src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"
           strategy="beforeInteractive"
         />

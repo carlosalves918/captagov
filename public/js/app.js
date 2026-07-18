@@ -3683,6 +3683,7 @@ function renderRelatorios() {
         </select>
       </div>
       <button class="btn btn-primary" onclick="gerarPDFRelatorio()">📥 Gerar PDF</button>
+      <button class="btn btn-secondary" onclick="gerarPDFRelatorioCompleto()" title="Relatório + contratos + comprovantes de pagamento mesclados em um único PDF">📎 Relatório Completo (com anexos)</button>
       <button class="btn btn-secondary" onclick="exportarCSVFinanceiro()">📊 Exportar CSV</button>
       <button class="btn btn-secondary" onclick="exportarAnexosZIP()">📦 Exportar Tudo (ZIP)</button>
       ${STATE.usuarios.length > 0 ? `
@@ -4727,10 +4728,13 @@ function baixarDocumentoSalvoPDF(id) {
   pdf.save(docSalvo.titulo.replace(/\s+/g, '_') + '.pdf');
 }
 
-async function gerarPDFRelatorio() {
-  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
-  if (!c) { toastAviso('Selecione um convênio.'); return; }
-  const resumo = calcularResumoFinanceiro(c.id);
+// Monta o corpo do Relatório Financeiro (cabeçalho, resumo executivo,
+// dados cadastrais, gráfico, contratadas/aditivos, pagamentos, extratos,
+// rendimentos, sumário e rodapé com verificação) e devolve o `doc` do
+// jsPDF já pronto — SEM salvar. Isso permite reaproveitar exatamente o
+// mesmo relatório tanto no botão "Gerar PDF" simples quanto no "Relatório
+// Completo com Anexos", que ainda mescla os arquivos anexados por cima.
+async function construirPDFRelatorioFinanceiro(c, resumo) {
   const fin = resumo.fin;
 
   const { jsPDF } = window.jspdf;
@@ -5150,7 +5154,160 @@ async function gerarPDFRelatorio() {
     totalPago: resumo.totalPago,
   });
 
+  return doc;
+}
+
+async function gerarPDFRelatorio() {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) { toastAviso('Selecione um convênio.'); return; }
+  const resumo = calcularResumoFinanceiro(c.id);
+  const doc = await construirPDFRelatorioFinanceiro(c, resumo);
   doc.save('relatorio-' + (c.numero || 'convenio') + '.pdf');
+}
+
+// Converte o base64 (parte depois da vírgula de um data URL) em ArrayBuffer,
+// formato que o pdf-lib espera para carregar/embutir arquivos.
+function base64ParaArrayBuffer(base64) {
+  const binStr = atob(base64);
+  const bytes = new Uint8Array(binStr.length);
+  for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// Relatório Financeiro + todos os anexos, mesclados num ÚNICO PDF, na
+// mesma ordem em que aparecem os menus da Prestação de Contas: primeiro o
+// relatório com as tabelas, depois — por contratada — o Extrato do
+// Contrato e o Contrato, depois todos os documentos anexados de cada
+// Pagamento. Extratos bancários mensais e Rendimentos ficam só nas
+// tabelas do relatório (não têm anexo mesclado aqui).
+async function gerarPDFRelatorioCompleto() {
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) { toastAviso('Selecione um convênio.'); return; }
+  if (typeof window.PDFLib === 'undefined') { toastErro('Biblioteca de mesclagem de PDF não carregada. Recarregue a página.'); return; }
+
+  const resumo = calcularResumoFinanceiro(c.id);
+  const fin = resumo.fin;
+  const { PDFDocument } = window.PDFLib;
+
+  toastAviso('Montando o relatório completo — isso pode levar alguns segundos...');
+
+  // 1) Relatório financeiro (tabelas) — igual ao "Gerar PDF" simples
+  const relatorio = await construirPDFRelatorioFinanceiro(c, resumo);
+  const merged = await PDFDocument.load(relatorio.output('arraybuffer'));
+
+  // 2) Monta a fila de anexos a mesclar, na ordem dos menus
+  const itens = [];
+  (fin.contratadas || []).forEach(ct => {
+    const rotulo = ct.razaoSocial || 'Contratada sem nome';
+    const subRotulo = ct.numeroContrato ? rotulo + ' — contrato nº ' + ct.numeroContrato : rotulo;
+    if (ct.extratoArquivoDataUrl) {
+      itens.push({ secao: 'Contratadas', titulo: 'Extrato do Contrato', subtitulo: subRotulo, dataUrl: ct.extratoArquivoDataUrl, nomeArquivo: ct.extratoArquivo });
+    }
+    if (ct.contratoArquivoDataUrl) {
+      itens.push({ secao: 'Contratadas', titulo: 'Contrato', subtitulo: subRotulo, dataUrl: ct.contratoArquivoDataUrl, nomeArquivo: ct.contratoArquivo });
+    }
+  });
+  (fin.pagamentos || []).forEach(pg => {
+    const ct = (fin.contratadas || []).find(x => x.id === pg.contratadaId);
+    const subBase = 'Pagamento nº ' + pg.numero + (ct ? ' — ' + ct.razaoSocial : '');
+    (pg.anexos || []).forEach(a => {
+      if (a.dataUrl) itens.push({ secao: 'Pagamentos', titulo: 'Pagamento nº ' + pg.numero, subtitulo: subBase + ' — ' + (a.nome || 'anexo'), dataUrl: a.dataUrl, nomeArquivo: a.nome });
+    });
+    CATEGORIAS_DOC_PAGAMENTO.forEach(cat => {
+      const item = pg.docs && pg.docs[cat.id];
+      if (item && item.anexado && item.arquivoDataUrl) {
+        itens.push({ secao: 'Pagamentos', titulo: 'Pagamento nº ' + pg.numero, subtitulo: subBase + ' — ' + cat.nome, dataUrl: item.arquivoDataUrl, nomeArquivo: item.arquivo });
+      }
+    });
+  });
+
+  let incluidos = 0;
+  const falharam = [];
+
+  for (const item of itens) {
+    try {
+      const mime = (String(item.dataUrl).match(/^data:([^;]+);/) || [])[1] || '';
+      if (mime !== 'application/pdf' && mime !== 'image/png' && mime !== 'image/jpeg' && mime !== 'image/jpg') {
+        throw new Error('Formato de anexo não suportado para mesclagem: ' + (mime || 'desconhecido'));
+      }
+      await adicionarPaginaDivisoria(merged, item.titulo, item.subtitulo);
+      await mesclarAnexoNoPDF(merged, item.dataUrl);
+      incluidos++;
+    } catch (e) {
+      console.error('Não foi possível mesclar anexo:', item, e);
+      falharam.push(item.nomeArquivo || item.subtitulo || item.titulo);
+    }
+  }
+
+  const mergedBytes = await merged.save();
+  const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'relatorio-completo-' + (c.numero || 'convenio') + '.pdf';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+  if (falharam.length > 0) {
+    toastAviso(`Relatório gerado com ${incluidos} anexo(s). ${falharam.length} arquivo(s) não puderam ser mesclados (formato não suportado): ${falharam.slice(0, 3).join(', ')}${falharam.length > 3 ? '...' : ''}`);
+  } else if (incluidos > 0) {
+    toastSucesso(`Relatório completo gerado com ${incluidos} anexo(s) mesclado(s)!`);
+  } else {
+    toastSucesso('Relatório gerado (nenhum anexo de contrato/pagamento encontrado para mesclar).');
+  }
+}
+
+// Página de separação, com o título e subtítulo do anexo que vem a seguir
+// (ex: "Contrato — Construtora XYZ Ltda — contrato nº 12/2026"), pra deixar
+// claro no PDF final onde cada anexo começa.
+async function adicionarPaginaDivisoria(pdfDoc, titulo, subtitulo) {
+  const { StandardFonts, rgb } = window.PDFLib;
+  const page = pdfDoc.addPage([595.28, 841.89]); // A4 em pontos
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontNormal = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const { width, height } = page.getSize();
+  page.drawRectangle({ x: 0, y: height / 2 - 40, width, height: 80, color: rgb(0.97, 0.98, 0.99) });
+  page.drawText(titulo || 'Anexo', {
+    x: 50, y: height / 2 + 4, size: 18, font: fontBold, color: rgb(0.043, 0.106, 0.2),
+  });
+  if (subtitulo) {
+    page.drawText(subtitulo, {
+      x: 50, y: height / 2 - 16, size: 11, font: fontNormal, color: rgb(0.4, 0.45, 0.55),
+    });
+  }
+  return page;
+}
+
+// Mescla um único anexo (dataURL) no PDFDocument em construção: se for PDF,
+// copia todas as páginas; se for imagem (jpg/png), cria uma página A4 e
+// desenha a imagem centralizada, respeitando a proporção original.
+async function mesclarAnexoNoPDF(pdfDoc, dataUrl) {
+  const [prefixo, base64] = String(dataUrl).split(',');
+  if (!base64) throw new Error('Anexo sem conteúdo (data URL inválida).');
+  const bytes = base64ParaArrayBuffer(base64);
+  const mime = (prefixo.match(/data:([^;]+);/) || [])[1] || '';
+
+  if (mime === 'application/pdf') {
+    const donor = await pdfDoc.constructor.load(bytes);
+    const paginas = await pdfDoc.copyPages(donor, donor.getPageIndices());
+    paginas.forEach(p => pdfDoc.addPage(p));
+    return;
+  }
+
+  if (mime === 'image/png' || mime === 'image/jpeg' || mime === 'image/jpg') {
+    const imagem = mime === 'image/png' ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+    const pageW = 595.28, pageH = 841.89, margem = 40;
+    const maxW = pageW - margem * 2, maxH = pageH - margem * 2;
+    const escala = Math.min(maxW / imagem.width, maxH / imagem.height, 1);
+    const w = imagem.width * escala, h = imagem.height * escala;
+    const page = pdfDoc.addPage([pageW, pageH]);
+    page.drawImage(imagem, { x: (pageW - w) / 2, y: (pageH - h) / 2, width: w, height: h });
+    return;
+  }
+
+  throw new Error('Formato de anexo não suportado para mesclagem: ' + (mime || 'desconhecido'));
 }
 
 // Relatório consolidado — visão de portfólio com todos os convênios
@@ -5296,7 +5453,7 @@ Object.assign(window, {
   escapeHtml, excluirConvenio, excluirEmenda,
   excluirInstituicao, excluirProponente, excluirResponsavelTecnico, excluirUsuario, exportarAnexosZIP,
   exportarCSVFinanceiro, exportarDados, fecharDocumentoGerado, gerarDocumento,
-  gerarPDFRelatorio, gerarPDFRelatorioGeral, importarDados, lancarExtrato, lancarRendimento,
+  gerarPDFRelatorio, gerarPDFRelatorioCompleto, gerarPDFRelatorioGeral, importarDados, lancarExtrato, lancarRendimento,
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
   mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
   registrarPagamento,
