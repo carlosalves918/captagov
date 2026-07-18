@@ -421,15 +421,38 @@ function calcularResumoFinanceiro(id) {
   const saldoRendimento = totalRendimento - totalUsoRendimento;
   const totalPago = (f.pagamentos || []).reduce((a, p) => a + (p.valor || 0), 0);
   const totalContratado = (f.contratadas || []).reduce((a, ct) => a + parseMoeda(ct.valorContrato || '0'), 0);
-  const saldoTotal = valorTotal + movExtrato + totalRendimento - totalUsoRendimento - totalPago;
+  // saldoTotal reflete o dinheiro que de fato está na conta do convênio.
+  // Não subtraímos totalPago aqui: os pagamentos às contratadas já aparecem
+  // como saída no Extrato (é o mesmo desembolso, visto do banco), então
+  // movExtrato já os contempla. Somar totalPago de novo contaria o mesmo
+  // gasto duas vezes. totalPago continua existindo para o controle de
+  // execução do CONTRATO (saldoContrato / saldoPorContratada) e para o
+  // checklist de documentos do pagamento — só não entra de novo aqui.
+  const saldoTotal = valorTotal + movExtrato + totalRendimento - totalUsoRendimento;
   // Saldo do CONTRATO (o que ainda resta a pagar dentro do valor contratado
   // com a(s) contratada(s) via licitação) — diferente do saldo do convênio
   // (saldoTotal, que reflete o valor total repassado/contrapartida menos o
   // que já saiu). Só faz sentido quando há contratada(s) cadastrada(s).
+  // OBS: é um valor AGREGADO (soma de todas as contratadas) — útil como
+  // visão geral, mas a validação de cada pagamento usa o saldo POR
+  // contratada (ver calcularSaldoContratada), pra não deixar uma
+  // contratada estourar o próprio contrato só porque outra ainda tem saldo.
   const saldoContrato = totalContratado > 0 ? (totalContratado - totalPago) : null;
   const rendimentoMedioMensal = (f.rendimentos && f.rendimentos.length) ? totalRendimento / f.rendimentos.length : 0;
   const mesesSemRendimento = calcularMesesSemLancamento(c, f.rendimentos || []);
   return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, divergenciaEntradas, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, rendimentoMedioMensal, mesesSemRendimento, fin: f };
+}
+
+// Saldo de execução do contrato de UMA contratada específica (não agregado).
+// Evita que o pagamento de uma contratada seja validado contra o saldo
+// combinado de todas as contratadas do convênio.
+function calcularSaldoContratada(c, contratadaId) {
+  const fin = c.financeiro;
+  const ct = (fin.contratadas || []).find(x => x.id === contratadaId);
+  if (!ct) return null;
+  const valorContrato = parseMoeda(ct.valorContrato || '0');
+  const totalPagoContratada = (fin.pagamentos || []).filter(p => p.contratadaId === contratadaId).reduce((a, p) => a + (p.valor || 0), 0);
+  return { valorContrato, totalPago: totalPagoContratada, saldo: valorContrato - totalPagoContratada };
 }
 
 // Compara os meses da vigência do convênio (dataInicio -> dataFim, limitado a
@@ -1567,22 +1590,23 @@ async function registrarPagamento() {
   if (!c) return;
   const resumo = calcularResumoFinanceiro(c.id);
   const valor = parseMoeda(document.getElementById('pg_valor')?.value || '0');
+  const contratadaId = document.getElementById('pg_contratada')?.value || '';
+  if (!contratadaId) { toastAviso('Selecione a contratada.'); return; }
 
-  // Quando há contratada(s) cadastrada(s) (obra licitada), o pagamento não
-  // pode estourar o valor contratado — essa é a trava mais específica.
-  // Além disso, também não pode faltar dinheiro de fato no convênio
-  // (saldo do repasse/contrapartida, considerando extratos e rendimentos).
-  if (resumo.saldoContrato !== null && valor - resumo.saldoContrato > 0.009) {
-    toastErro('Saldo insuficiente no CONTRATO para este pagamento. Saldo disponível no contrato: ' + formatMoeda(resumo.saldoContrato));
+  // A trava mais específica é por CONTRATADA: o pagamento não pode estourar
+  // o valor do contrato dela — mesmo que outra contratada do convênio ainda
+  // tenha saldo de contrato disponível.
+  const saldoCt = calcularSaldoContratada(c, contratadaId);
+  if (saldoCt && valor - saldoCt.saldo > 0.009) {
+    toastErro('Saldo insuficiente no CONTRATO desta contratada. Saldo disponível: ' + formatMoeda(saldoCt.saldo));
     return;
   }
+  // Também não pode faltar dinheiro de fato no convênio (saldo do
+  // repasse/contrapartida, considerando extratos e rendimentos).
   if (valor - resumo.saldoTotal > 0.009) {
     toastErro('Saldo insuficiente no CONVÊNIO para este pagamento. Saldo disponível: ' + formatMoeda(resumo.saldoTotal));
     return;
   }
-
-  const contratadaId = document.getElementById('pg_contratada')?.value || '';
-  if (!contratadaId) { toastAviso('Selecione a contratada.'); return; }
 
   c.financeiro.pagamentos.push({
     id: gerarId('pg'), numero: c.financeiro.pagamentos.length + 1,
@@ -2715,12 +2739,13 @@ function renderContratadas(c) {
     ${fin.contratadas && fin.contratadas.length > 0 ? `
       <div class="table-wrapper">
         <table class="table-comfortable">
-          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor Vigente</th><th>Vigência</th><th>Anexos</th><th></th></tr></thead>
+          <thead><tr><th>Razão Social</th><th>CNPJ</th><th>Nº Contrato</th><th>Valor Vigente</th><th>Pago / Saldo</th><th>Vigência</th><th>Anexos</th><th></th></tr></thead>
           <tbody>
             ${fin.contratadas.map(ct => {
               garantirCamposAditivo(ct);
               const vig = statusVigencia({ dataFim: ct.dataFimVigencia });
               const houveAditivoValor = parseMoeda(ct.valorContratoOriginal || '0') !== parseMoeda(ct.valorContrato || '0');
+              const saldoCt = calcularSaldoContratada(c, ct.id);
               return `
               <tr${STATE.contratadaEditandoId === ct.id ? ' style="background:var(--blue-100);"' : ''}>
                 <td><strong>${escapeHtml(ct.razaoSocial)}</strong></td>
@@ -2729,6 +2754,10 @@ function renderContratadas(c) {
                 <td class="font-mono" style="white-space:nowrap;">
                   ${formatMoeda(parseMoeda(ct.valorContrato || '0'))}
                   ${houveAditivoValor ? `<div style="font-size:10px;color:var(--gray-500);font-family:inherit;">orig. ${formatMoeda(parseMoeda(ct.valorContratoOriginal || '0'))}</div>` : ''}
+                </td>
+                <td class="font-mono" style="white-space:nowrap;">
+                  ${formatMoeda(saldoCt.totalPago)}
+                  <div style="font-size:10px;color:${saldoCt.saldo < 0 ? 'var(--danger)' : 'var(--gray-500)'};">saldo ${formatMoeda(saldoCt.saldo)}</div>
                 </td>
                 <td style="white-space:nowrap;">
                   <span class="badge ${vig.cls}" style="font-size:10.5px;">${vig.label}</span>
@@ -2937,13 +2966,27 @@ function renderPagamentos(c, resumo) {
   const contratadas = fin.contratadas || [];
   return `
     <div style="margin-bottom:20px;">
-      <div class="card-title" style="font-size:16px;">Registrar Pagamento</div>
-      <div class="card-subtitle">
-        ${resumo.saldoContrato !== null ? `Saldo disponível no contrato: <strong style="color:${resumo.saldoContrato >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoContrato)}</strong> · ` : ''}Saldo disponível no convênio: <strong style="color:${resumo.saldoTotal >= 0 ? 'var(--green-600)' : 'var(--danger)'}">${formatMoeda(resumo.saldoTotal)}</strong>
+      <div class="fin-summary-grid" style="margin-bottom:16px;">
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Total Pago (todas as contratadas)</div>
+          <div class="fin-summary-value negative">${formatMoeda(resumo.totalPago)}</div>
+        </div>
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Saldo Disponível no Convênio</div>
+          <div class="fin-summary-value ${resumo.saldoTotal >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.saldoTotal)}</div>
+        </div>
+        ${resumo.saldoContrato !== null ? `
+        <div class="fin-summary-card">
+          <div class="fin-summary-label">Saldo de Contrato (agregado)</div>
+          <div class="fin-summary-value ${resumo.saldoContrato >= 0 ? 'positive' : 'negative'}">${formatMoeda(resumo.saldoContrato)}</div>
+        </div>
+        ` : ''}
       </div>
+      <div class="card-title" style="font-size:16px;">Registrar Pagamento</div>
+      <div class="card-subtitle">O saldo do convênio já considera os pagamentos, pois eles também aparecem como saída no Extrato — não é somado de novo aqui.</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
         <div class="form-group"><label class="form-label">Contratada <span class="required">*</span></label>
-          <select class="form-input form-select" id="pg_contratada">
+          <select class="form-input form-select" id="pg_contratada" onchange="updateSaldoPreview()">
             <option value="">Selecione...</option>
             ${contratadas.map(ct => `<option value="${ct.id}">${escapeHtml(ct.razaoSocial)}</option>`).join('')}
           </select>
@@ -2953,15 +2996,16 @@ function renderPagamentos(c, resumo) {
         <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="pg_obs" /></div>
         <button class="btn btn-primary" style="height:42px;" onclick="registrarPagamento()">+ Registrar</button>
       </div>
-      <div class="card-subtitle" style="margin-top:8px;">Saldo após este pagamento: <strong id="saldoPreview">—</strong></div>
+      <div class="card-subtitle" style="margin-top:8px;">Saldo após este pagamento: <strong id="saldoPreview">selecione a contratada e o valor</strong></div>
     </div>
     ${fin.pagamentos && fin.pagamentos.length > 0 ? `
       <div class="table-wrapper">
         <table>
-          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Status</th><th>Checklist Docs</th><th></th></tr></thead>
+          <thead><tr><th>Nº</th><th>Contratada</th><th>Data</th><th>Valor</th><th>Saldo Restante do Contrato</th><th>Status</th><th>Checklist Docs</th><th></th></tr></thead>
           <tbody>
             ${fin.pagamentos.map(p => {
               const ct = contratadas.find(x => x.id === p.contratadaId);
+              const saldoCt = calcularSaldoContratada(c, p.contratadaId);
               const docsObj = p.docs || {};
               const docsTotal = CATEGORIAS_DOC_PAGAMENTO.length;
               const docsAnexados = CATEGORIAS_DOC_PAGAMENTO.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
@@ -2970,6 +3014,7 @@ function renderPagamentos(c, resumo) {
                 <td>${escapeHtml(ct ? ct.razaoSocial : '?')}</td>
                 <td>${p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
                 <td class="font-mono">${formatMoeda(p.valor)}</td>
+                <td class="font-mono" style="color:${saldoCt && saldoCt.saldo < 0 ? 'var(--danger)' : 'var(--gray-600)'};">${saldoCt ? formatMoeda(saldoCt.saldo) : '—'}</td>
                 <td>
                   <div style="display:flex;align-items:center;gap:6px;">
                     <span class="badge ${p.status === 'fechado' ? 'badge-ok' : 'badge-warn'}">${p.status}</span>
@@ -4260,19 +4305,22 @@ function removerRendimento(id) {
 
 function updateSaldoPreview() {
   if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
   const resumo = calcularResumoFinanceiro(STATE.convenioAtualId);
   const valorPgto = parseMoeda(document.getElementById('pg_valor')?.value || '0');
+  const contratadaId = document.getElementById('pg_contratada')?.value || '';
   const el = document.getElementById('saldoPreview');
   if (!el) return;
-  if (resumo.saldoContrato !== null) {
-    const saldoContratoPos = resumo.saldoContrato - valorPgto;
-    const saldoConvenioPos = resumo.saldoTotal - valorPgto;
-    el.textContent = 'Contrato: ' + formatMoeda(saldoContratoPos) + '  ·  Convênio: ' + formatMoeda(saldoConvenioPos);
+  const saldoCt = contratadaId ? calcularSaldoContratada(c, contratadaId) : null;
+  const saldoConvenioPos = resumo.saldoTotal - valorPgto;
+  if (saldoCt) {
+    const saldoContratoPos = saldoCt.saldo - valorPgto;
+    el.textContent = 'Contrato desta contratada: ' + formatMoeda(saldoContratoPos) + '  ·  Convênio: ' + formatMoeda(saldoConvenioPos);
     el.style.color = (saldoContratoPos < 0 || saldoConvenioPos < 0) ? 'var(--danger)' : 'var(--green-600)';
   } else {
-    const saldo = resumo.saldoTotal - valorPgto;
-    el.textContent = formatMoeda(saldo);
-    el.style.color = saldo < 0 ? 'var(--danger)' : 'var(--green-600)';
+    el.textContent = 'Convênio: ' + formatMoeda(saldoConvenioPos) + ' — selecione a contratada para ver o saldo do contrato';
+    el.style.color = saldoConvenioPos < 0 ? 'var(--danger)' : 'var(--gray-600)';
   }
 }
 
