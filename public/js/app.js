@@ -61,6 +61,10 @@ const STATE = {
   docFormValues: {},
   docFormListas: {},
   pagamentoDocsAbertoId: null,
+  docsBuscaTipo: '',
+  docsFiltroCategoria: 'todas',
+  docsBuscaSalvos: '',
+  docsFiltroStatusSalvos: 'todos',
 };
 
 // Tipos de emenda parlamentar disponíveis
@@ -2034,17 +2038,24 @@ function removerDocExtra(id) {
 }
 
 // ==================== GERAÇÃO DE DOCUMENTOS ====================
+const CATEGORIAS_DOC_IA = [
+  { id: 'comunicacao', nome: 'Comunicação' },
+  { id: 'contratacao', nome: 'Planejamento e Contratação (Lei 14.133/2021)' },
+  { id: 'riscoAcao', nome: 'Risco e Plano de Ação' },
+  { id: 'convenio', nome: 'Convênio / Transferência de Recursos' },
+];
+
 const TIPOS_DOC_IA = [
-  { id: 'oficio', nome: 'Ofício', desc: 'Comunicação oficial a outro órgão ou autoridade.' },
-  { id: 'memorando', nome: 'Memorando', desc: 'Comunicação interna entre setores.' },
-  { id: 'dfd', nome: 'DFD', desc: 'Formalização da Demanda (Lei 14.133/2021).' },
-  { id: 'etp', nome: 'ETP', desc: 'Estudo Técnico Preliminar.' },
-  { id: 'tr', nome: 'Termo de Referência', desc: 'Especificações do objeto contratado.' },
-  { id: 'projetoBasico', nome: 'Projeto Básico', desc: 'Detalhamento técnico da obra.' },
-  { id: 'matrizRisco', nome: 'Matriz de Risco', desc: 'Identificação e alocação de riscos.' },
-  { id: 'justificativaTecnica', nome: 'Justificativa Técnica', desc: 'Fundamentação da necessidade.' },
-  { id: 'planoAcao', nome: 'Plano de Ação (SWOT + 5W2H)', desc: 'Análise de viabilidade e plano.' },
-  { id: 'planoTrabalho', nome: 'Plano de Trabalho', desc: 'Estrutura completa SICONV/TransfereGov: dados cadastrais, discriminação do projeto, cronograma, desembolso, classificação da despesa e plano de aplicação.' },
+  { id: 'oficio', nome: 'Ofício', desc: 'Comunicação oficial a outro órgão ou autoridade.', categoria: 'comunicacao', icone: '📨' },
+  { id: 'memorando', nome: 'Memorando', desc: 'Comunicação interna entre setores.', categoria: 'comunicacao', icone: '🗒️' },
+  { id: 'dfd', nome: 'DFD', desc: 'Formalização da Demanda (Lei 14.133/2021).', categoria: 'contratacao', icone: '📋' },
+  { id: 'etp', nome: 'ETP', desc: 'Estudo Técnico Preliminar.', categoria: 'contratacao', icone: '🔍' },
+  { id: 'tr', nome: 'Termo de Referência', desc: 'Especificações do objeto contratado.', categoria: 'contratacao', icone: '📐' },
+  { id: 'projetoBasico', nome: 'Projeto Básico', desc: 'Detalhamento técnico da obra.', categoria: 'contratacao', icone: '🏗️' },
+  { id: 'matrizRisco', nome: 'Matriz de Risco', desc: 'Identificação e alocação de riscos.', categoria: 'riscoAcao', icone: '⚠️' },
+  { id: 'planoAcao', nome: 'Plano de Ação (SWOT + 5W2H)', desc: 'Análise de viabilidade e plano.', categoria: 'riscoAcao', icone: '🎯' },
+  { id: 'justificativaTecnica', nome: 'Justificativa Técnica', desc: 'Fundamentação da necessidade.', categoria: 'convenio', icone: '🧾' },
+  { id: 'planoTrabalho', nome: 'Plano de Trabalho', desc: 'Estrutura completa SICONV/TransfereGov: dados cadastrais, discriminação do projeto, cronograma, desembolso, classificação da despesa e plano de aplicação.', categoria: 'convenio', icone: '📘' },
 ];
 
 // ==================== RELATÓRIOS ====================
@@ -3754,39 +3765,91 @@ function renderDocsIA() {
     `;
   }
 
+  const docs = c ? (c.docsGeradosIA || []) : [];
+  const contagemPorTipo = {};
+  docs.forEach(d => { contagemPorTipo[d.tipoId] = (contagemPorTipo[d.tipoId] || 0) + 1; });
+
+  const busca = (STATE.docsBuscaTipo || '').trim().toLowerCase();
+  const tiposFiltrados = TIPOS_DOC_IA.filter(t => {
+    const bateCategoria = STATE.docsFiltroCategoria === 'todas' || t.categoria === STATE.docsFiltroCategoria;
+    const bateBusca = !busca || t.nome.toLowerCase().includes(busca) || t.desc.toLowerCase().includes(busca);
+    return bateCategoria && bateBusca;
+  });
+
   return `
     <div class="card-title" style="font-size:16px;">Geração de Documentos</div>
     <div class="card-subtitle">Preenchimento automático a partir dos dados do convênio selecionado no Painel — sem IA, 100% offline (pronto para IA real quando o app virar Electron).</div>
-    ${STATE.responsaveisTecnicos.length > 0 ? `
-    <div class="form-group full-width" style="margin-top:12px;max-width:420px;">
-      <label class="form-label">Responsável técnico (assina Justificativa/Plano de Trabalho)</label>
-      <select class="form-input form-select" onchange="STATE.responsavelTecnicoSelecionadoId=this.value">
-        <option value="">— nenhum (deixar em branco) —</option>
-        ${STATE.responsaveisTecnicos.map(r => `<option value="${r.id}" ${STATE.responsavelTecnicoSelecionadoId === r.id ? 'selected' : ''}>${escapeHtml(r.nome)}${r.cargo ? ' — ' + escapeHtml(r.cargo) : ''}</option>`).join('')}
-      </select>
+
+    ${!c ? `
+    <div class="alert alert-warning" style="margin-top:16px;">
+      Nenhum convênio selecionado. <a href="#" onclick="mudarView('painel');return false;" style="font-weight:600;">Escolha um convênio no Painel Geral</a> para gerar ou ver os documentos dele.
     </div>
     ` : ''}
-    ${STATE.usuarios.length > 0 ? `
-    <div class="form-group full-width" style="margin-top:12px;max-width:420px;">
-      <label class="form-label">Elaborado por (usuário)</label>
-      <select class="form-input form-select" onchange="STATE.usuarioSelecionadoId=this.value">
-        <option value="">— nenhum (deixar em branco) —</option>
-        ${STATE.usuarios.map(u => `<option value="${u.id}" ${STATE.usuarioSelecionadoId === u.id ? 'selected' : ''}>${escapeHtml(u.nome)}${u.cargo ? ' — ' + escapeHtml(u.cargo) : ''}</option>`).join('')}
-      </select>
+
+    ${STATE.responsaveisTecnicos.length > 0 || STATE.usuarios.length > 0 ? `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;">
+      ${STATE.responsaveisTecnicos.length > 0 ? `
+      <div class="form-group" style="max-width:420px;flex:1;min-width:220px;">
+        <label class="form-label">Responsável técnico (assina Justificativa/Plano de Trabalho)</label>
+        <select class="form-input form-select" onchange="STATE.responsavelTecnicoSelecionadoId=this.value">
+          <option value="">— nenhum (deixar em branco) —</option>
+          ${STATE.responsaveisTecnicos.map(r => `<option value="${r.id}" ${STATE.responsavelTecnicoSelecionadoId === r.id ? 'selected' : ''}>${escapeHtml(r.nome)}${r.cargo ? ' — ' + escapeHtml(r.cargo) : ''}</option>`).join('')}
+        </select>
+      </div>
+      ` : ''}
+      ${STATE.usuarios.length > 0 ? `
+      <div class="form-group" style="max-width:420px;flex:1;min-width:220px;">
+        <label class="form-label">Elaborado por (usuário)</label>
+        <select class="form-input form-select" onchange="STATE.usuarioSelecionadoId=this.value">
+          <option value="">— nenhum (deixar em branco) —</option>
+          ${STATE.usuarios.map(u => `<option value="${u.id}" ${STATE.usuarioSelecionadoId === u.id ? 'selected' : ''}>${escapeHtml(u.nome)}${u.cargo ? ' — ' + escapeHtml(u.cargo) : ''}</option>`).join('')}
+        </select>
+      </div>
+      ` : ''}
     </div>
     ` : ''}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:16px;">
-      ${TIPOS_DOC_IA.map(t => `
-        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:16px;cursor:pointer;" onclick="gerarDocumento('${t.id}')">
-          <div style="font-size:24px;margin-bottom:8px;">📄</div>
-          <div style="font-weight:600;font-size:14px;color:var(--navy-900);">${t.nome}</div>
-          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">${t.desc}</div>
-          <div style="font-size:11px;margin-top:8px;font-weight:600;color:var(--green-600);">
-            📝 Formulário guiado (${(CAMPOS_DOC[t.id] || []).length} campos)
-          </div>
-        </div>
-      `).join('')}
+
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-top:20px;">
+      <div class="form-group" style="flex:1;min-width:220px;margin-bottom:0;">
+        <label class="form-label">Buscar tipo de documento</label>
+        <input class="form-input" placeholder="Ex: ofício, risco, plano..." value="${escapeHtml(STATE.docsBuscaTipo)}" oninput="STATE.docsBuscaTipo=this.value;renderTudo();" />
+      </div>
+      <div class="form-group" style="min-width:220px;margin-bottom:0;">
+        <label class="form-label">Categoria</label>
+        <select class="form-input form-select" onchange="STATE.docsFiltroCategoria=this.value;renderTudo();">
+          <option value="todas" ${STATE.docsFiltroCategoria === 'todas' ? 'selected' : ''}>Todas as categorias</option>
+          ${CATEGORIAS_DOC_IA.map(cat => `<option value="${cat.id}" ${STATE.docsFiltroCategoria === cat.id ? 'selected' : ''}>${cat.nome}</option>`).join('')}
+        </select>
+      </div>
     </div>
+
+    ${tiposFiltrados.length === 0
+      ? '<div class="empty-state" style="margin-top:16px;"><div class="empty-state-icon">🔎</div><div class="empty-state-title">Nada encontrado</div><div class="empty-state-text">Ajuste a busca ou escolha outra categoria.</div></div>'
+      : CATEGORIAS_DOC_IA.filter(cat => STATE.docsFiltroCategoria === 'todas' || STATE.docsFiltroCategoria === cat.id)
+        .map(cat => {
+          const tiposDaCategoria = tiposFiltrados.filter(t => t.categoria === cat.id);
+          if (tiposDaCategoria.length === 0) return '';
+          return `
+            <div class="card-title" style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);margin-top:24px;">${cat.nome}</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px;">
+              ${tiposDaCategoria.map(t => {
+                const qtd = contagemPorTipo[t.id] || 0;
+                return `
+                <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-md);padding:16px;cursor:${c ? 'pointer' : 'not-allowed'};opacity:${c ? '1' : '0.6'};position:relative;" ${c ? `onclick="gerarDocumento('${t.id}')"` : 'title="Selecione um convênio para gerar este documento"'}>
+                  ${qtd > 0 ? `<span class="badge badge-ok" style="position:absolute;top:12px;right:12px;">${qtd} salvo${qtd > 1 ? 's' : ''}</span>` : ''}
+                  <div style="font-size:24px;margin-bottom:8px;">${t.icone}</div>
+                  <div style="font-weight:600;font-size:14px;color:var(--navy-900);padding-right:${qtd > 0 ? '64px' : '0'};">${t.nome}</div>
+                  <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">${t.desc}</div>
+                  <div style="font-size:11px;margin-top:8px;font-weight:600;color:var(--green-600);">
+                    📝 Formulário guiado (${(CAMPOS_DOC[t.id] || []).length} campos)
+                  </div>
+                </div>
+              `;
+              }).join('')}
+            </div>
+          `;
+        }).join('')}
+
     ${renderDocumentosSalvos(c)}
   `;
 }
@@ -3798,10 +3861,41 @@ function renderDocumentosSalvos(c) {
   if (!c) return '';
   const docs = c.docsGeradosIA || [];
   if (docs.length === 0) return '';
+
+  const totalAprovados = docs.filter(d => d.status === 'aprovado').length;
+  const totalRascunhos = docs.length - totalAprovados;
+
+  const buscaSalvos = (STATE.docsBuscaSalvos || '').trim().toLowerCase();
+  const docsFiltrados = docs.filter(d => {
+    const bateStatus = STATE.docsFiltroStatusSalvos === 'todos' || d.status === STATE.docsFiltroStatusSalvos;
+    const bateBusca = !buscaSalvos || (d.titulo || '').toLowerCase().includes(buscaSalvos);
+    return bateStatus && bateBusca;
+  });
+
   return `
-    <div class="card-title" style="font-size:16px;margin-top:28px;">Documentos Salvos (${docs.length})</div>
-    <div style="margin-top:8px;">
-      ${docs.slice().reverse().map(doc => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:28px;">
+      <div class="card-title" style="font-size:16px;margin:0;">Documentos Salvos (${docs.length})</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span class="badge badge-warn">${totalRascunhos} rascunho${totalRascunhos !== 1 ? 's' : ''}</span>
+        <span class="badge badge-ok">${totalAprovados} aprovado${totalAprovados !== 1 ? 's' : ''}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-top:12px;">
+      <div class="form-group" style="flex:1;min-width:200px;margin-bottom:0;">
+        <input class="form-input" placeholder="Buscar pelo título..." value="${escapeHtml(STATE.docsBuscaSalvos)}" oninput="STATE.docsBuscaSalvos=this.value;renderTudo();" />
+      </div>
+      <div class="form-group" style="min-width:180px;margin-bottom:0;">
+        <select class="form-input form-select" onchange="STATE.docsFiltroStatusSalvos=this.value;renderTudo();">
+          <option value="todos" ${STATE.docsFiltroStatusSalvos === 'todos' ? 'selected' : ''}>Todos os status</option>
+          <option value="rascunho" ${STATE.docsFiltroStatusSalvos === 'rascunho' ? 'selected' : ''}>Só rascunhos</option>
+          <option value="aprovado" ${STATE.docsFiltroStatusSalvos === 'aprovado' ? 'selected' : ''}>Só aprovados</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      ${docsFiltrados.length === 0
+        ? '<div class="empty-state text-sm" style="padding:24px;">Nenhum documento salvo bate com esse filtro.</div>'
+        : docsFiltrados.slice().reverse().map(doc => `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);margin-bottom:8px;">
           <div style="min-width:0;">
             <div style="font-weight:500;font-size:14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
