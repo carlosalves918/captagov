@@ -60,7 +60,7 @@ const STATE = {
 };
 
 // Tipos de emenda parlamentar disponíveis
-const TIPOS_EMENDA = ['Pix', 'Transferência Fundo a Fundo', 'Emenda de Bancada', 'Emenda de Comissão', 'Convênio'];
+const TIPOS_EMENDA = ['Emenda Individual', 'Pix', 'Transferência Fundo a Fundo', 'Emenda de Bancada', 'Emenda de Comissão', 'Convênio'];
 // Tipos de emenda que exigem vínculo com um Convênio já cadastrado (dados completos do conveniente)
 const TIPOS_EMENDA_COM_CONVENIO = ['Convênio'];
 
