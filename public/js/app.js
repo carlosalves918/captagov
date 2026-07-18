@@ -5262,21 +5262,77 @@ async function gerarPDFRelatorioCompleto() {
 // Página de separação, com o título e subtítulo do anexo que vem a seguir
 // (ex: "Contrato — Construtora XYZ Ltda — contrato nº 12/2026"), pra deixar
 // claro no PDF final onde cada anexo começa.
+// Quebra um texto em várias linhas de forma que cada uma caiba dentro de
+// `larguraMax` (em pontos) com a fonte/tamanho dados — usado nas capas de
+// separação, cujo título/subtítulo pode ser bem mais longo que o espaço
+// disponível (ex: razão social grande + número de contrato).
+function quebrarTextoPDF(font, texto, tamanho, larguraMax) {
+  const palavras = String(texto || '').split(/\s+/).filter(Boolean);
+  if (palavras.length === 0) return [''];
+  const linhas = [];
+  let linhaAtual = '';
+  palavras.forEach(palavra => {
+    const tentativa = linhaAtual ? linhaAtual + ' ' + palavra : palavra;
+    if (linhaAtual && font.widthOfTextAtSize(tentativa, tamanho) > larguraMax) {
+      linhas.push(linhaAtual);
+      linhaAtual = palavra;
+    } else {
+      linhaAtual = tentativa;
+    }
+  });
+  if (linhaAtual) linhas.push(linhaAtual);
+  return linhas;
+}
+
 async function adicionarPaginaDivisoria(pdfDoc, titulo, subtitulo) {
   const { StandardFonts, rgb } = window.PDFLib;
   const page = pdfDoc.addPage([595.28, 841.89]); // A4 em pontos
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   const fontNormal = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const { width, height } = page.getSize();
-  page.drawRectangle({ x: 0, y: height / 2 - 40, width, height: 80, color: rgb(0.97, 0.98, 0.99) });
-  page.drawText(titulo || 'Anexo', {
-    x: 50, y: height / 2 + 4, size: 18, font: fontBold, color: rgb(0.043, 0.106, 0.2),
+
+  const margemLateral = 60;
+  const larguraMax = width - margemLateral * 2;
+  const tamanhoTitulo = 20;
+  const tamanhoSub = 13;
+  const alturaLinhaTitulo = tamanhoTitulo * 1.3;
+  const alturaLinhaSub = tamanhoSub * 1.4;
+  const espacoEntreBlocos = 14;
+  const paddingVertical = 30;
+
+  const linhasTitulo = quebrarTextoPDF(fontBold, titulo || 'Anexo', tamanhoTitulo, larguraMax);
+  const linhasSub = subtitulo ? quebrarTextoPDF(fontNormal, subtitulo, tamanhoSub, larguraMax) : [];
+
+  const alturaTitulo = linhasTitulo.length * alturaLinhaTitulo;
+  const alturaSub = linhasSub.length ? espacoEntreBlocos + linhasSub.length * alturaLinhaSub : 0;
+  const alturaCaixa = alturaTitulo + alturaSub + paddingVertical * 2;
+  const yCaixaBase = Math.max(0, height / 2 - alturaCaixa / 2);
+
+  page.drawRectangle({ x: 0, y: yCaixaBase, width, height: alturaCaixa, color: rgb(0.97, 0.98, 0.99) });
+
+  // cursorTopo marca o topo da PRÓXIMA linha; cada drawText usa a
+  // baseline, então descontamos ~80% do tamanho da fonte (aproximação do
+  // ascent) pra posicionar o texto dentro da própria linha.
+  let cursorTopo = yCaixaBase + alturaCaixa - paddingVertical;
+  linhasTitulo.forEach(linha => {
+    page.drawText(linha, {
+      x: margemLateral, y: cursorTopo - tamanhoTitulo * 0.8,
+      size: tamanhoTitulo, font: fontBold, color: rgb(0.043, 0.106, 0.2),
+    });
+    cursorTopo -= alturaLinhaTitulo;
   });
-  if (subtitulo) {
-    page.drawText(subtitulo, {
-      x: 50, y: height / 2 - 16, size: 11, font: fontNormal, color: rgb(0.4, 0.45, 0.55),
+
+  if (linhasSub.length) {
+    cursorTopo -= espacoEntreBlocos;
+    linhasSub.forEach(linha => {
+      page.drawText(linha, {
+        x: margemLateral, y: cursorTopo - tamanhoSub * 0.8,
+        size: tamanhoSub, font: fontNormal, color: rgb(0.4, 0.45, 0.55),
+      });
+      cursorTopo -= alturaLinhaSub;
     });
   }
+
   return page;
 }
 
