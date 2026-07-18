@@ -74,7 +74,8 @@ const TIPOS_EMENDA_COM_CONVENIO = ['Convênio'];
 // Tesouro/fundo de origem, não do convenente (IN STN/CGU aplicável a cada caso).
 const ORIGENS_RECURSO = [
   { id: 'emenda_pix', label: 'Emenda Pix', usoLivreRendimento: true },
-  { id: 'convenio_comum', label: 'Convênio / Recurso Próprio', usoLivreRendimento: true },
+  { id: 'convenio', label: 'Convênio', usoLivreRendimento: true },
+  { id: 'recurso_proprio', label: 'Recurso Próprio', usoLivreRendimento: true },
   { id: 'emenda_individual', label: 'Emenda Individual', usoLivreRendimento: false },
   { id: 'emenda_bancada', label: 'Emenda de Bancada', usoLivreRendimento: false },
   { id: 'emenda_comissao', label: 'Emenda de Comissão', usoLivreRendimento: false },
