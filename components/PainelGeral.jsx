@@ -254,6 +254,11 @@ export default function PainelGeral() {
                     Saldo: <strong className={saldoClass}>{saldo}</strong>
                   </span>
                   <span className={`badge ${st.cls}`}>{st.label}</span>
+                  {res && res.rendimentoLivre === false && res.saldoRendimentoADevolver > 0 && (
+                    <span className="badge badge-warn" title={`Rendimento bloqueado (${res.origemInfo ? res.origemInfo.label : 'origem restrita'}) — a devolver via GRU: ${formatMoeda(res.saldoRendimentoADevolver)}`}>
+                      🔒 Rendimento a devolver
+                    </span>
+                  )}
                   <button type="button" className="btn btn-ghost btn-sm" onClick={() => editarConvenio(c.id)}>Abrir</button>
                   {c.tipo !== 'projeto' && (
                     <button type="button" className="btn btn-ghost btn-sm" onClick={() => abrirPrestacaoContas(c.id)}>📂 PC</button>

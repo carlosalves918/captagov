@@ -64,6 +64,36 @@ const TIPOS_EMENDA = ['Pix', 'Transferência Fundo a Fundo', 'Emenda de Bancada'
 // Tipos de emenda que exigem vínculo com um Convênio já cadastrado (dados completos do conveniente)
 const TIPOS_EMENDA_COM_CONVENIO = ['Convênio'];
 
+// Origem do recurso do convênio — determina se o RENDIMENTO de aplicação
+// financeira sobre o saldo pode ser usado livremente no objeto do convênio
+// (usoLivreRendimento: true) ou se fica bloqueado para uso, devendo ser
+// devolvido ao órgão/ministério de origem via GRU ao final da vigência
+// (usoLivreRendimento: false). Regra: Emenda Pix tem uso livre do rendimento
+// (Portaria Interministerial nº 6.291/2023); Emenda Individual, de Bancada,
+// de Comissão e Transferência Fundo a Fundo NÃO têm — o rendimento é do
+// Tesouro/fundo de origem, não do convenente (IN STN/CGU aplicável a cada caso).
+const ORIGENS_RECURSO = [
+  { id: 'emenda_pix', label: 'Emenda Pix', usoLivreRendimento: true },
+  { id: 'convenio_comum', label: 'Convênio / Recurso Próprio', usoLivreRendimento: true },
+  { id: 'emenda_individual', label: 'Emenda Individual', usoLivreRendimento: false },
+  { id: 'emenda_bancada', label: 'Emenda de Bancada', usoLivreRendimento: false },
+  { id: 'emenda_comissao', label: 'Emenda de Comissão', usoLivreRendimento: false },
+  { id: 'fundo_a_fundo', label: 'Transferência Fundo a Fundo', usoLivreRendimento: false },
+  { id: 'outro', label: 'Outro', usoLivreRendimento: false },
+];
+
+function origemRecursoInfo(c) {
+  return ORIGENS_RECURSO.find(o => o.id === c.origemRecurso) || null;
+}
+
+// Se a origem não foi informada (convênios antigos, cadastrados antes deste
+// campo existir), não bloqueamos por padrão — só passa a travar quando o
+// usuário classificar explicitamente a origem como restrita.
+function usoRendimentoLivre(c) {
+  const info = origemRecursoInfo(c);
+  return info ? info.usoLivreRendimento : true;
+}
+
 // Tipos de aditivo contratual disponíveis para as contratadas
 const TIPOS_ADITIVO = [
   { id: 'valor', label: 'De Valor' },
@@ -407,7 +437,7 @@ function removerAditivo(ctId, aditivoId) {
 function calcularResumoFinanceiro(id) {
   const c = STATE.convenios.find(x => x.id === id);
   if (!c) return null;
-  if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
+  if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [], devolucoesGru: [] };
   const f = c.financeiro;
   const valor = parseMoeda(c.valor || '0');
   const contrapartida = parseMoeda(c.contrapartida || '0');
@@ -440,7 +470,19 @@ function calcularResumoFinanceiro(id) {
   const saldoContrato = totalContratado > 0 ? (totalContratado - totalPago) : null;
   const rendimentoMedioMensal = (f.rendimentos && f.rendimentos.length) ? totalRendimento / f.rendimentos.length : 0;
   const mesesSemRendimento = calcularMesesSemLancamento(c, f.rendimentos || []);
-  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, divergenciaEntradas, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, rendimentoMedioMensal, mesesSemRendimento, fin: f };
+
+  // Origem do recurso: Emenda Pix (e recurso próprio/convênio comum) tem uso
+  // livre do rendimento. Emenda Individual, de Bancada, de Comissão e
+  // Transferência Fundo a Fundo NÃO têm — o rendimento fica bloqueado para
+  // uso no objeto do convênio e deve ser devolvido ao órgão de origem via
+  // GRU. saldoRendimentoADevolver é o que ainda falta devolver (desconta o
+  // que já foi registrado em devolucoesGru).
+  const origemInfo = origemRecursoInfo(c);
+  const rendimentoLivre = usoRendimentoLivre(c);
+  const totalDevolvidoGru = (f.devolucoesGru || []).reduce((a, g) => a + (g.valor || 0), 0);
+  const saldoRendimentoADevolver = rendimentoLivre ? 0 : Math.max(0, saldoRendimento - totalDevolvidoGru);
+
+  return { valor, contrapartida, valorTotal, totalEntradas, totalSaidas, movExtrato, divergenciaEntradas, totalRendimento, totalUsoRendimento, saldoRendimento, totalPago, totalContratado, saldoTotal, saldoContrato, rendimentoMedioMensal, mesesSemRendimento, origemInfo, rendimentoLivre, totalDevolvidoGru, saldoRendimentoADevolver, fin: f };
 }
 
 // Saldo de execução do contrato de UMA contratada específica (não agregado).
@@ -593,7 +635,7 @@ function preencherComProponente(id) {
 const camposConvenio = [
   'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
   'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_telefone', 'c_email',
-  'c_banco', 'c_agencia', 'c_conta', 'c_valor', 'c_contrapartida',
+  'c_banco', 'c_agencia', 'c_conta', 'c_valor', 'c_contrapartida', 'c_origem_recurso',
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
 
@@ -668,7 +710,7 @@ function editarConvenio(id) {
       c_bairro: c.bairroProp, c_municipio: c.municipioProp,
       c_telefone: c.telefoneInst, c_email: c.emailInst,
       c_banco: c.banco, c_agencia: c.agencia, c_conta: c.conta, c_valor: c.valor,
-      c_contrapartida: c.contrapartida,
+      c_contrapartida: c.contrapartida, c_origem_recurso: c.origemRecurso || '',
       c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
       c_data_fim: c.dataFim, c_prazo_pc: c.prazoPC || '60',
     });
@@ -735,7 +777,7 @@ function salvarConvenio() {
     bairroProp: form.c_bairro, municipioProp: form.c_municipio,
     telefoneInst: form.c_telefone, emailInst: form.c_email,
     banco: form.c_banco, agencia: form.c_agencia, conta: form.c_conta,
-    valor: form.c_valor, contrapartida: form.c_contrapartida,
+    valor: form.c_valor, contrapartida: form.c_contrapartida, origemRecurso: form.c_origem_recurso || null,
     dataAssinatura: form.c_data_assinatura, dataInicio, dataFim, dataFimOriginal: dataFim,
     prazoPC: form.c_prazo_pc, prazoLimitePC,
     instituicaoId: STATE.convenioInstituicaoIdSelecionada || null,
@@ -762,7 +804,7 @@ function salvarConvenio() {
       documentos: {},
       documentosExtras: [],
       docsGeradosIA: [],
-      financeiro: { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] },
+      financeiro: { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [], devolucoesGru: [] },
     };
     STATE.convenios.push(novo);
     STATE.convenioEditandoId = novoId;
@@ -2171,7 +2213,7 @@ function importarDados(file) {
     STATE.responsaveisTecnicos = payload.responsaveisTecnicos || [];
     STATE.usuarios = payload.usuarios || [];
     STATE.convenios.forEach(c => {
-      if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [] };
+      if (!c.financeiro) c.financeiro = { extratos: [], rendimentos: [], autorizacoes: [], usos: [], contratadas: [], pagamentos: [], devolucoesGru: [] };
       if (!c.documentosExtras) c.documentosExtras = [];
       c.documentosExtras.forEach(doc => { if (!doc.status) doc.status = doc.anexado ? 'anexado' : 'solicitado'; });
       if (!c.docsGeradosIA) c.docsGeradosIA = [];
@@ -2478,6 +2520,16 @@ function renderCadastro() {
           <input class="form-input" type="text" id="c_contrapartida" oninput="mascararValor(this)" inputmode="numeric" />
         </div>
         ` : ''}
+        <div class="form-group">
+          <label class="form-label">Origem do Recurso</label>
+          <select class="form-input" id="c_origem_recurso">
+            <option value="">Selecione…</option>
+            ${ORIGENS_RECURSO.map(o => `<option value="${o.id}">${o.label}</option>`).join('')}
+          </select>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:4px;">
+            Define se o rendimento de aplicação financeira pode ser usado no convênio (Emenda Pix) ou fica bloqueado para devolução via GRU (Emenda Individual, de Bancada, de Comissão, Fundo a Fundo).
+          </div>
+        </div>
 
         <div class="form-section-title">📅 Vigência e Prazos</div>
         <div class="form-group">
@@ -3143,20 +3195,32 @@ function renderRendimentos(c, resumo) {
   const fin = c.financeiro;
   const r = resumo || calcularResumoFinanceiro(c.id) || {};
   const mesesFaltando = r.mesesSemRendimento || [];
+  const livre = r.rendimentoLivre !== false;
+  const origemLabel = r.origemInfo ? r.origemInfo.label : null;
+  const devolucoes = fin.devolucoesGru || [];
+  const usos = fin.usos || [];
+
   return `
     <div style="margin-bottom:20px;">
       <div class="card-title" style="font-size:16px;">Rendimentos de Aplicação Financeira</div>
-      <div class="card-subtitle">Rendimento de poupança/fundo automático sobre o recurso ainda não utilizado. O saldo de rendimento disponível entra no cálculo do saldo total do convênio — o valor "Aplicado" é apenas informativo (não afeta o saldo).</div>
+      <div class="card-subtitle">Rendimento de poupança/fundo automático sobre o recurso ainda não utilizado.${livre ? ' O saldo de rendimento disponível entra no cálculo do saldo total do convênio' : ' Para a origem deste recurso, o rendimento NÃO pode ser usado no objeto do convênio'} — o valor "Aplicado" é apenas informativo (não afeta o saldo).</div>
 
       <div class="fin-summary-grid" style="margin-top:12px;">
         <div class="fin-summary-card">
           <div class="fin-summary-label">Rendimento Acumulado</div>
           <div class="fin-summary-value positive">${formatMoeda(r.totalRendimento)}</div>
         </div>
+        ${livre ? `
         <div class="fin-summary-card">
           <div class="fin-summary-label">Saldo de Rendimento Disponível</div>
           <div class="fin-summary-value ${(r.saldoRendimento || 0) >= 0 ? 'positive' : 'negative'}">${formatMoeda(r.saldoRendimento)}</div>
         </div>
+        ` : `
+        <div class="fin-summary-card" style="border-color:var(--warn-300, #fcd34d);">
+          <div class="fin-summary-label">🔒 A Devolver via GRU</div>
+          <div class="fin-summary-value ${(r.saldoRendimentoADevolver || 0) > 0 ? 'negative' : 'positive'}">${formatMoeda(r.saldoRendimentoADevolver)}</div>
+        </div>
+        `}
         <div class="fin-summary-card">
           <div class="fin-summary-label">Rendimento Médio Mensal</div>
           <div class="fin-summary-value neutral">${formatMoeda(r.rendimentoMedioMensal)}</div>
@@ -3167,6 +3231,12 @@ function renderRendimentos(c, resumo) {
         </div>
       </div>
     </div>
+
+    ${!livre ? `
+      <div class="alert alert-warning" style="margin-bottom:16px;">
+        🔒 <strong>Uso do rendimento bloqueado.</strong> A origem do recurso deste convênio é <strong>${escapeHtml(origemLabel || 'restrita')}</strong> — pela regra vigente, o rendimento de aplicação financeira sobre o saldo não pertence ao convenente e não pode ser usado no objeto do convênio. Ele deve ser devolvido ao órgão/ministério concedente por meio de GRU (Guia de Recolhimento da União), registre abaixo.
+      </div>
+    ` : ''}
 
     ${mesesFaltando.length > 0 ? `
       <div class="alert alert-warning" style="margin-bottom:16px;">
@@ -3223,6 +3293,66 @@ function renderRendimentos(c, resumo) {
       </div>
       <div id="rendimentoAnexosContainer"></div>
     ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhum rendimento registrado.</div>'}
+
+    ${livre ? `
+      <div style="margin:28px 0 20px;">
+        <div class="card-title" style="font-size:15px;">Registrar Uso do Rendimento</div>
+        <div class="card-subtitle">Origem do recurso: ${escapeHtml(origemLabel || 'não informada')} — uso livre no objeto do convênio.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
+          <div class="form-group"><label class="form-label">Data</label><input class="form-input" type="date" id="us_data" /></div>
+          <div class="form-group"><label class="form-label">Valor (R$)</label><input class="form-input" id="us_valor" oninput="mascararValor(this)" inputmode="numeric" /></div>
+          <div class="form-group" style="grid-column:span 2;"><label class="form-label">Finalidade</label><input class="form-input" id="us_finalidade" placeholder="Ex: aplicado no objeto do convênio" /></div>
+          <button class="btn btn-primary" style="height:42px;" onclick="registrarUsoRendimento()">+ Registrar Uso</button>
+        </div>
+      </div>
+      ${usos.length > 0 ? `
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Data</th><th>Valor</th><th>Finalidade</th><th></th></tr></thead>
+            <tbody>
+              ${usos.slice().sort((a, b) => (a.data || '').localeCompare(b.data || '')).map(u => `
+                <tr>
+                  <td>${u.data ? new Date(u.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                  <td class="font-mono">${formatMoeda(u.valor)}</td>
+                  <td>${escapeHtml(u.finalidade || '—')}</td>
+                  <td><button class="btn btn-ghost btn-sm" onclick="removerUsoRendimento('${u.id}')">Remover</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : ''}
+    ` : `
+      <div style="margin:28px 0 20px;">
+        <div class="card-title" style="font-size:15px;">Registrar Devolução via GRU</div>
+        <div class="card-subtitle">Origem do recurso: ${escapeHtml(origemLabel || 'restrita')} — o rendimento deve retornar ao órgão de origem. Falta devolver: <strong>${formatMoeda(r.saldoRendimentoADevolver)}</strong>.</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;align-items:end;margin-top:12px;">
+          <div class="form-group"><label class="form-label">Data</label><input class="form-input" type="date" id="gru_data" /></div>
+          <div class="form-group"><label class="form-label">Valor (R$)</label><input class="form-input" id="gru_valor" oninput="mascararValor(this)" inputmode="numeric" /></div>
+          <div class="form-group"><label class="form-label">Nº da GRU</label><input class="form-input" id="gru_numero" /></div>
+          <div class="form-group"><label class="form-label">Obs</label><input class="form-input" id="gru_obs" /></div>
+          <button class="btn btn-primary" style="height:42px;" onclick="registrarDevolucaoGru()">+ Registrar Devolução</button>
+        </div>
+      </div>
+      ${devolucoes.length > 0 ? `
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Data</th><th>Valor</th><th>Nº GRU</th><th>Obs</th><th></th></tr></thead>
+            <tbody>
+              ${devolucoes.slice().sort((a, b) => (a.data || '').localeCompare(b.data || '')).map(g => `
+                <tr>
+                  <td>${g.data ? new Date(g.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                  <td class="font-mono">${formatMoeda(g.valor)}</td>
+                  <td>${escapeHtml(g.numeroGru || '—')}</td>
+                  <td>${escapeHtml(g.obs || '—')}</td>
+                  <td><button class="btn btn-ghost btn-sm" onclick="removerDevolucaoGru('${g.id}')">Remover</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '<div class="empty-state text-sm" style="padding:30px;">Nenhuma devolução registrada ainda.</div>'}
+    `}
   `;
 }
 
@@ -4303,6 +4433,84 @@ function removerRendimento(id) {
   renderTudo();
 }
 
+// Registra o USO do rendimento no objeto do convênio — só disponível quando
+// a origem do recurso permite (usoRendimentoLivre). Para origens bloqueadas
+// (emenda individual/bancada/comissão, fundo a fundo) esta ação nem aparece
+// na tela; o caminho correto é registrarDevolucaoGru().
+function registrarUsoRendimento() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  if (!usoRendimentoLivre(c)) {
+    toastErro('O rendimento deste convênio está bloqueado para uso — a origem do recurso exige devolução via GRU.');
+    return;
+  }
+  const valor = parseMoeda(document.getElementById('us_valor')?.value || '0');
+  if (valor <= 0) { toastAviso('Informe um valor de uso maior que zero.'); return; }
+  const resumo = calcularResumoFinanceiro(c.id);
+  if (resumo && valor > resumo.saldoRendimento) {
+    toastErro('Valor maior que o saldo de rendimento disponível (' + formatMoeda(resumo.saldoRendimento) + ').');
+    return;
+  }
+  c.financeiro.usos.push({
+    id: gerarId('us'),
+    data: document.getElementById('us_data')?.value || '',
+    valor,
+    finalidade: document.getElementById('us_finalidade')?.value || '',
+  });
+  salvarEstado();
+  toastSucesso('Uso do rendimento registrado.');
+  renderFinanceiro();
+}
+
+function removerUsoRendimento(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  if (!confirm('Remover este uso de rendimento?')) return;
+  c.financeiro.usos = (c.financeiro.usos || []).filter(x => x.id !== id);
+  salvarEstado();
+  renderFinanceiro();
+}
+
+// Registra a DEVOLUÇÃO do rendimento bloqueado ao órgão/ministério de
+// origem, via GRU (Guia de Recolhimento da União) — usado quando a origem
+// do recurso NÃO permite uso livre do rendimento.
+function registrarDevolucaoGru() {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  const valor = parseMoeda(document.getElementById('gru_valor')?.value || '0');
+  if (valor <= 0) { toastAviso('Informe um valor de devolução maior que zero.'); return; }
+  const numero = document.getElementById('gru_numero')?.value || '';
+  if (!numero.trim()) { toastAviso('Informe o número da GRU.'); return; }
+  if (!c.financeiro.devolucoesGru) c.financeiro.devolucoesGru = [];
+  c.financeiro.devolucoesGru.push({
+    id: gerarId('gru'),
+    data: document.getElementById('gru_data')?.value || '',
+    valor,
+    numeroGru: numero,
+    obs: document.getElementById('gru_obs')?.value || '',
+  });
+  salvarEstado();
+  toastSucesso('Devolução via GRU registrada.');
+  renderFinanceiro();
+}
+
+function removerDevolucaoGru(id) {
+  if (!podeEditar()) { bloqueadoSomenteLeitura(); return; }
+  if (!STATE.convenioAtualId) return;
+  const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
+  if (!c) return;
+  if (!confirm('Remover este registro de devolução?')) return;
+  c.financeiro.devolucoesGru = (c.financeiro.devolucoesGru || []).filter(x => x.id !== id);
+  salvarEstado();
+  renderFinanceiro();
+}
+
 function updateSaldoPreview() {
   if (!STATE.convenioAtualId) return;
   const c = STATE.convenios.find(x => x.id === STATE.convenioAtualId);
@@ -5094,6 +5302,7 @@ Object.assign(window, {
   removerAditivo, removerAditivoConvenio, removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerDocumentoSalvo, removerExtrato, removerPagamento,
   removerRendimento, renderTudo, renderBody, restaurarSnapshotAuto, excluirSnapshotAuto,
+  registrarUsoRendimento, removerUsoRendimento, registrarDevolucaoGru, removerDevolucaoGru,
   reverterDocumentoSalvo, salvarConvenio, salvarDocumentoGerado, salvarEmenda, salvarInstituicao, salvarProponente,
   salvarResponsavelTecnico, salvarUsuario,
   preverBrasao, removerBrasao, salvarIdentidadeVisual, baixarDocumentoGeradoPDF, baixarDocumentoSalvoPDF,
