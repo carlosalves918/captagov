@@ -129,6 +129,22 @@ export function contarVigenciasAVencer(convenios, limiteDias = 30) {
   }).length;
 }
 
+// Convênios com a vigência já encerrada (ou encerrando hoje).
+export function contarConveniosVencidos(convenios) {
+  return (convenios || []).filter((c) => {
+    const v = statusVigencia(c);
+    return v.dias !== null && v.dias <= 0;
+  }).length;
+}
+
+// Convênios ainda vigentes, mas que vencem em até `limiteDias` dias.
+export function contarConveniosAVencer(convenios, limiteDias = 30) {
+  return (convenios || []).filter((c) => {
+    const v = statusVigencia(c);
+    return v.dias !== null && v.dias > 0 && v.dias <= limiteDias;
+  }).length;
+}
+
 // Varre TODAS as contratadas de TODOS os convênios e devolve as que estão
 // com a vigência do contrato vencida ou perto de vencer (<= limiteDias),
 // ordenadas da mais urgente pra menos urgente. Usado no alerta do Painel

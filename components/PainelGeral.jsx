@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../contexts/AppContext';
-import { formatMoeda, parseMoeda, statusConvenio, formatData, statusVigencia, contarVigenciasAVencer, listarContratosAVencer } from '../public/js/utils.js';
+import { formatMoeda, parseMoeda, statusConvenio, formatData, statusVigencia, contarConveniosVencidos, contarConveniosAVencer, listarContratosAVencer } from '../public/js/utils.js';
 
 export default function PainelGeral() {
   const { state, tick, novoConvenio, editarConvenio, selecionarConvenio, abrirPrestacaoContas, abrirAditivoDireto, duplicarConvenio, excluirConvenio, calcularResumoFinanceiro } = useApp();
@@ -23,7 +23,8 @@ export default function PainelGeral() {
     const st = statusConvenio(c);
     return st.cls === 'badge-warn' || st.cls === 'badge-danger';
   }).length;
-  const vigenciasAVencer = contarVigenciasAVencer(convenios, 30);
+  const conveniosVencidos = contarConveniosVencidos(convenios);
+  const conveniosAVencer = contarConveniosAVencer(convenios, 30);
   const contratosAVencer = useMemo(
     () => listarContratosAVencer(convenios, 30),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,10 +93,17 @@ export default function PainelGeral() {
           </div>
         </div>
         <div className="stat-card">
-          <div className="stat-icon danger">📅</div>
+          <div className="stat-icon danger">⛔</div>
           <div className="stat-content">
-            <div className="stat-value">{vigenciasAVencer}</div>
-            <div className="stat-label">Vigências a Vencer (30d) / Vencidas</div>
+            <div className="stat-value">{conveniosVencidos}</div>
+            <div className="stat-label">Convênios Vencidos</div>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon warning">📅</div>
+          <div className="stat-content">
+            <div className="stat-value">{conveniosAVencer}</div>
+            <div className="stat-label">Convênios a Vencer (30d)</div>
           </div>
         </div>
         <div className="stat-card">
