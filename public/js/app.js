@@ -3460,6 +3460,11 @@ function finalizarFormularioDocumento() {
   if (!c) { toastAviso('Selecione um convênio no Painel antes de gerar o documento.'); return; }
   const rt = STATE.responsaveisTecnicos.find(x => x.id === STATE.responsavelTecnicoSelecionadoId) || null;
   const usuario = STATE.usuarios.find(x => x.id === STATE.usuarioSelecionadoId) || null;
+  // Proponente/convenente e emenda parlamentar já vinculados a este convênio
+  // (quando existirem) — usados para puxar dados cadastrais, bancários e de
+  // origem do recurso já cadastrados, em vez de deixar em branco no documento.
+  const proponenteVinculado = STATE.proponentes.find(p => p.id === c.proponenteId) || null;
+  const emendaVinculada = STATE.emendas.find(e => e.convenioId === c.id) || null;
 
   sincronizarCamposFormularioDoc(tipoId);
   campos.filter(cp => cp.tipo === 'lista').forEach(cp => sincronizarListaFormularioDoc(cp.id, cp.colunas));
@@ -3471,7 +3476,7 @@ function finalizarFormularioDocumento() {
   }
 
   const valores = { ...STATE.docFormValues, listas: STATE.docFormListas };
-  const texto = montarDocumentoFinal(tipoId, valores, c, rt, usuario);
+  const texto = montarDocumentoFinal(tipoId, valores, c, rt, usuario, proponenteVinculado, emendaVinculada);
 
   STATE.docGeradoTipo = tipoId;
   STATE.docGeradoTexto = texto;

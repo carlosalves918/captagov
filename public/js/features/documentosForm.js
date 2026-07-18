@@ -145,10 +145,42 @@ export const CAMPOS_DOC = {
   planoTrabalho: [
     { id: 'objetoProjeto', label: '2.3 Objeto do Projeto', tipo: 'textarea', placeholder: 'O que será feito e qual benefício trará à população.' },
     { id: 'justificativaProposicao', label: '2.4 Justificativa da Proposição', tipo: 'textarea', placeholder: 'Contexto, demanda existente, base legal e adequação da solução.' },
-    { id: 'metas', label: '2.5 Metas a serem atingidas', tipo: 'textarea', placeholder: 'Uma meta por linha, de forma quantificável.' },
+    {
+      id: 'metas',
+      label: '2.5 Metas a serem atingidas',
+      tipo: 'lista',
+      colunas: [
+        { id: 'meta', label: 'Meta', tipo: 'texto', placeholder: 'Ex: Aquisição de equipamentos' },
+        { id: 'indicador', label: 'Indicador de aferição', tipo: 'texto', placeholder: 'Ex: Nº de equipamentos entregues' },
+        { id: 'quantidade', label: 'Quantidade', tipo: 'texto' },
+        { id: 'unidade', label: 'Unidade', tipo: 'texto', placeholder: 'Ex: unidade, m², km' },
+        { id: 'prazo', label: 'Prazo', tipo: 'texto', placeholder: 'Ex: 90 dias' },
+      ],
+    },
     { id: 'formaExecucao', label: '2.7 Forma de execução das atividades e cumprimento das metas', tipo: 'textarea' },
-    { id: 'cronogramaResumo', label: '3. Execução (cronograma resumido)', tipo: 'textarea', placeholder: 'Descreva as etapas e prazos principais.' },
-    { id: 'classificacaoDespesa', label: '5. Classificação da despesa', tipo: 'textarea', placeholder: 'Ex: 4.4.90.52 — Equipamentos e Material Permanente...' },
+    {
+      id: 'cronograma',
+      label: '3. Execução (cronograma físico)',
+      tipo: 'lista',
+      colunas: [
+        { id: 'etapa', label: 'Etapa/Fase', tipo: 'texto', placeholder: 'Ex: Licitação e contratação' },
+        { id: 'inicio', label: 'Início', tipo: 'texto', placeholder: 'Ex: mês 1' },
+        { id: 'termino', label: 'Término', tipo: 'texto', placeholder: 'Ex: mês 2' },
+        { id: 'responsavel', label: 'Responsável', tipo: 'texto' },
+      ],
+    },
+    {
+      id: 'despesas',
+      label: '5. Classificação da despesa e plano de aplicação',
+      tipo: 'lista',
+      colunas: [
+        { id: 'natureza', label: 'Natureza da despesa', tipo: 'texto', placeholder: 'Ex: 4.4.90.52' },
+        { id: 'especificacao', label: 'Especificação', tipo: 'texto', placeholder: 'Ex: Equipamentos e material permanente' },
+        { id: 'quantidade', label: 'Quantidade', tipo: 'texto' },
+        { id: 'valorUnitario', label: 'Valor unitário', tipo: 'texto' },
+        { id: 'valorTotal', label: 'Valor total', tipo: 'texto' },
+      ],
+    },
   ],
 };
 
@@ -423,29 +455,74 @@ ${linhasTabela}
 ${c.municipioProp || '[Município]'}, ${hojeFormatado()}.`;
 }
 
-function montarPlanoTrabalho(v, c, rt) {
+function montarPlanoTrabalho(v, c, rt, proponente, emenda) {
+  const p = proponente || null;
+  const e = emenda || null;
   const valor = formatMoeda(parseMoeda(c.valor || '0'));
   const contrapartida = c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : 'R$ 0,00';
   const valorTotal = formatMoeda(parseMoeda(c.valor || '0') + parseMoeda(c.contrapartida || '0'));
   const responsavelLinha = rt
     ? `${rt.nome}${rt.cargo ? ' — ' + rt.cargo : ''}${rt.numeroRegistro ? ' (' + (rt.conselho || 'CREA') + ' ' + rt.numeroRegistro + ')' : ''}`
     : '[nome do responsável] — [cargo]';
+
+  // Dados cadastrais: usa o proponente/convenente vinculado quando existir;
+  // cai para os campos soltos do convênio quando não houver vínculo.
+  const orgaoEntidade = (p && p.razaoSocial) || c.orgao || '[órgão/entidade]';
+  const naturezaJuridica = (p && p.natureza) || '[natureza jurídica]';
+  const documento = (p && p.documento) || c.cnpj || '[CNPJ]';
+  const endereco = (p && p.logradouro) || c.logradouro || '[endereço]';
+  const bairro = (p && p.bairro) || '';
+  const municipio = (p && p.municipio) || c.municipioProp || '[cidade]';
+  const cep = (p && p.cep) || c.cep || '[CEP]';
+  const telefone = (p && p.telefone) || c.telefoneInst || '[telefone]';
+  const email = (p && p.email) || c.emailInst || '[e-mail]';
+  const banco = (p && p.banco) || c.banco || '[banco]';
+  const agencia = (p && p.agencia) || c.agencia || '[agência]';
+  const conta = (p && p.conta) || c.conta || '[conta]';
+  const repNome = (p && p.repNome) || '[Nome do(a) representante legal]';
+  const repCargo = (p && p.repCargo) || '[cargo]';
+  const repCpf = (p && p.repCpf) || '';
+
+  const linhaEmenda = e
+    ? `${e.parlamentar || '[parlamentar]'}${e.partido ? ' (' + e.partido + ')' : ''} — nº ${e.numero || '[número]'}/${e.ano || '[ano]'} — ${formatMoeda(parseMoeda(e.valor || '0'))}`
+    : '[sem emenda parlamentar vinculada]';
+  const origemRecurso = e
+    ? `Emenda ${e.tipo || 'parlamentar'} de autoria de ${e.parlamentar || '[parlamentar]'}${e.partido ? ' (' + e.partido + ')' : ''}, nº ${e.numero || '[número]'}/${e.ano || '[ano]'}, no valor de ${formatMoeda(parseMoeda(e.valor || '0'))}, junto ao órgão ${e.orgao || c.orgao || '[órgão concedente]'}.`
+    : `Recurso oriundo de ${c.orgao || '[órgão concedente]'}, sem emenda parlamentar vinculada cadastrada.`;
+
+  const metas = v.listas?.metas || [];
+  const linhasMetas = metas.length
+    ? metas.map((m) => `| ${linhaOuTraco(m.meta)} | ${linhaOuTraco(m.indicador)} | ${linhaOuTraco(m.quantidade)} | ${linhaOuTraco(m.unidade)} | ${linhaOuTraco(m.prazo)} |`).join('\n')
+    : '| — | — | — | — | — |';
+
+  const cronograma = v.listas?.cronograma || [];
+  const linhasCronograma = cronograma.length
+    ? cronograma.map((et) => `| ${linhaOuTraco(et.etapa)} | ${linhaOuTraco(et.inicio)} | ${linhaOuTraco(et.termino)} | ${linhaOuTraco(et.responsavel)} |`).join('\n')
+    : '| — | — | — | — |';
+
+  const despesas = v.listas?.despesas || [];
+  const linhasDespesas = despesas.length
+    ? despesas.map((d) => `| ${linhaOuTraco(d.natureza)} | ${linhaOuTraco(d.especificacao)} | ${linhaOuTraco(d.quantidade)} | ${linhaOuTraco(d.valorUnitario)} | ${linhaOuTraco(d.valorTotal)} |`).join('\n')
+    : '| — | — | — | — | — |';
+
   return `PLANO DE TRABALHO
 
-Dados Cadastrais da Prefeitura
+Dados Cadastrais do Proponente/Convenente
 
 1. DADOS CADASTRAIS DO PROPONENTE
-1.1 Órgão/Entidade: ${c.orgao || '[órgão/entidade]'}
-1.2 CNPJ: ${c.cnpj || '[CNPJ]'}
-1.3 Endereço: ${c.logradouro || '[endereço]'}
-1.4 Cidade: ${c.municipioProp || '[cidade]'}
-1.5 UF: ${c.uf || '[UF]'}
-1.6 CEP: ${c.cep || '[CEP]'}
-1.7 Esfera Administrativa: ${c.esfera || 'Municipal'}
-1.8 Fone: ${c.telefoneInst || '[telefone]'}
-1.9 E-mail: ${c.emailInst || '[e-mail]'}
-1.10 Responsável e Cargo: ${responsavelLinha}
-1.11 Nº Emenda: [se houver, informar o número da emenda parlamentar]
+1.1 Órgão/Entidade: ${orgaoEntidade}
+1.2 Natureza jurídica: ${naturezaJuridica}
+1.3 CNPJ/CPF: ${documento}
+1.4 Endereço: ${endereco}${bairro ? ' — ' + bairro : ''}
+1.5 Cidade: ${municipio}
+1.6 UF: ${c.uf || '[UF]'}
+1.7 CEP: ${cep}
+1.8 Esfera Administrativa: ${(p && p.natureza) ? naturezaJuridica : (c.esfera || 'Municipal')}
+1.9 Fone: ${telefone}
+1.10 E-mail: ${email}
+1.11 Representante legal: ${repNome}${repCargo ? ' — ' + repCargo : ''}${repCpf ? ' (CPF ' + repCpf + ')' : ''}
+1.12 Responsável técnico/assinatura: ${responsavelLinha}
+1.13 Emenda parlamentar vinculada: ${linhaEmenda}
 
 Elaboração do Projeto
 
@@ -461,9 +538,12 @@ ${linhaOuTraco(v.objetoProjeto)}
 
 2.4 Justificativa da Proposição:
 ${linhaOuTraco(v.justificativaProposicao)}
+Origem do recurso: ${origemRecurso}
 
 2.5 Metas a serem atingidas:
-${linhaOuTraco(v.metas)}
+| Meta | Indicador de aferição | Quantidade | Unidade | Prazo |
+|---|---|---|---|---|
+${linhasMetas}
 
 2.6 Parâmetros para aferição das metas:
 1. Comprovação documental — notas fiscais, contratos, termos de recebimento
@@ -474,31 +554,35 @@ ${linhaOuTraco(v.metas)}
 2.7 Forma de execução das atividades/projeto e de cumprimento das metas:
 ${linhaOuTraco(v.formaExecucao)}
 
-3. EXECUÇÃO (CRONOGRAMA)
-${linhaOuTraco(v.cronogramaResumo)}
+3. EXECUÇÃO (CRONOGRAMA FÍSICO)
+| Etapa/Fase | Início | Término | Responsável |
+|---|---|---|---|
+${linhasCronograma}
+
 Valor total do Projeto: ${valorTotal}
 
 4. DESEMBOLSO
 4.1 Valores do Concedente: distribuir ${valor} entre os meses previstos de repasse.
 4.2 Valores do Proponente (contrapartida): distribuir ${contrapartida} entre os meses previstos, se houver.
 
-5. CLASSIFICAÇÃO DA DESPESA
-${linhaOuTraco(v.classificacaoDespesa)}
+5. CLASSIFICAÇÃO DA DESPESA E PLANO DE APLICAÇÃO DOS RECURSOS
+| Natureza da despesa | Especificação | Quantidade | Valor unitário | Valor total |
+|---|---|---|---|---|
+${linhasDespesas}
 
-6. PLANO DE APLICAÇÃO DOS RECURSOS
 O Proponente deverá demonstrar como será aplicado o recurso, de acordo com o art. 53 do Decreto nº 44.474, de 23 de maio de 2017. Os recursos serão depositados e geridos em conta específica isenta de tarifa bancária, aberta em instituição financeira pública determinada pela administração.
 
-Dados da conta bancária: Agência nº ${c.agencia || '[agência]'} — Conta nº ${c.conta || '[conta]'} — Banco: ${c.banco || '[banco]'} — Tipo de conta: Corrente/Poupança.
+Dados da conta bancária: Agência nº ${agencia} — Conta nº ${conta} — Banco: ${banco} — Tipo de conta: Corrente/Poupança.
 
-${c.municipioProp || '[Município]'}, ${hojeFormatado()}.
+${municipio || '[Município]'}, ${hojeFormatado()}.
 
 _________________________________
 ${rt ? rt.nome : '[Nome do responsável técnico/Secretário(a)]'}
 ${rt ? (rt.cargo || (rt.conselho && rt.numeroRegistro ? rt.conselho + ' ' + rt.numeroRegistro : '[cargo]')) : '[cargo]'}
 
 _________________________________
-[Nome do(a) Prefeito(a)]
-Prefeito(a) Municipal`;
+${repNome}
+${repCargo || 'Prefeito(a) Municipal'}`;
 }
 
 const MONTADORES = {
@@ -518,11 +602,14 @@ const MONTADORES = {
  * Monta o texto final do documento a partir dos valores preenchidos no
  * formulário. `valores` deve conter os campos simples (por id) e, se o tipo
  * tiver campo(s) 'lista', uma chave `listas` com { [campoId]: [linhas...] }.
+ * `proponente` e `emenda` são o convenente e a emenda parlamentar vinculados
+ * ao convênio (quando existirem) — hoje usados pelo Plano de Trabalho para
+ * puxar dados cadastrais, bancários e de origem do recurso já cadastrados.
  */
-export function montarDocumentoFinal(tipoId, valores, convenio, responsavelTecnico, usuario) {
+export function montarDocumentoFinal(tipoId, valores, convenio, responsavelTecnico, usuario, proponente, emenda) {
   const montador = MONTADORES[tipoId];
   if (!montador || !convenio) return '';
-  let texto = montador(valores || {}, convenio, responsavelTecnico);
+  let texto = montador(valores || {}, convenio, responsavelTecnico, proponente, emenda);
   if (usuario) texto += `\n\nElaborado por: ${usuario.nome}${usuario.cargo ? ' — ' + usuario.cargo : ''}`;
   return texto;
 }
