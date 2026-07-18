@@ -2683,11 +2683,12 @@ function renderContratadas(c) {
   const fin = c.financeiro;
   const editando = STATE.contratadaEditandoId ? (fin.contratadas || []).find(x => x.id === STATE.contratadaEditandoId) : null;
   return `
-    <div style="margin-bottom:20px;">
+    <div style="margin-bottom:24px;">
       <div class="card-title" style="font-size:16px;">${editando ? 'Editar Contratada' : 'Adicionar Contratada'}</div>
       <div class="card-subtitle">Cadastre empresas contratadas para vincular pagamentos.</div>
-      
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;align-items:end;margin-top:12px;">
+
+      <div class="form-grid" style="margin-top:8px;">
+        <div class="form-section-title">🏢 Dados do Contrato</div>
         <div class="form-group">
           <label class="form-label">Razão Social <span class="required">*</span></label>
           <input class="form-input" id="ct_razao" value="${escapeHtml(editando?.razaoSocial || '')}" />
@@ -2704,13 +2705,8 @@ function renderContratadas(c) {
           <label class="form-label">Valor Contrato${editando && (editando.aditivos || []).some(a => a.tipo !== 'prazo') ? ' (original)' : ''}</label>
           <input class="form-input" id="ct_valorContrato" oninput="mascararValor(this)" inputmode="numeric" value="${escapeHtml(editando?.valorContratoOriginal ?? editando?.valorContrato ?? '')}" />
         </div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-primary" style="height:42px;" onclick="adicionarContratada()">${editando ? '💾 Salvar' : '+ Adicionar'}</button>
-          ${editando ? `<button class="btn btn-secondary" style="height:42px;" onclick="cancelarEdicaoContratada()">Cancelar</button>` : ''}
-        </div>
-      </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:12px;max-width:800px;">
+        <div class="form-section-title">📅 Vigência de Execução</div>
         <div class="form-group">
           <label class="form-label">Início de Execução</label>
           <input class="form-input" type="date" id="ct_dataInicio" value="${escapeHtml(editando?.dataInicioVigencia || '')}" />
@@ -2719,10 +2715,9 @@ function renderContratadas(c) {
           <label class="form-label">Fim de Vigência${editando && (editando.aditivos || []).some(a => a.tipo !== 'valor') ? ' (original)' : ''}</label>
           <input class="form-input" type="date" id="ct_dataFim" value="${escapeHtml(editando?.dataFimVigenciaOriginal ?? editando?.dataFimVigencia ?? '')}" />
         </div>
-      </div>
-      ${editando ? `<div class="card-subtitle" style="margin-top:6px;">Para aditivar valor ou prazo depois de salvo, use o botão <strong>Aditivos</strong> na tabela abaixo — os campos acima guardam sempre os dados <em>originais</em> do contrato.</div>` : ''}
+        ${editando ? `<div class="form-group full-width" style="margin-top:-8px;"><div class="card-subtitle" style="margin-bottom:0;">Para aditivar valor ou prazo depois de salvo, use o botão <strong>Aditivos</strong> na tabela abaixo — os campos acima guardam sempre os dados <em>originais</em> do contrato.</div></div>` : ''}
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px;max-width:800px;">
+        <div class="form-section-title">📎 Anexos</div>
         <div class="form-group">
           <label class="form-label">Anexar Contrato (PDF/imagem)</label>
           <input class="form-input" type="file" id="ct_anexo" accept=".pdf,.jpg,.jpeg,.png" />
@@ -2732,6 +2727,11 @@ function renderContratadas(c) {
           <label class="form-label">Anexar Extrato do Contrato (PDF/imagem)</label>
           <input class="form-input" type="file" id="ct_anexo_extrato" accept=".pdf,.jpg,.jpeg,.png" />
           ${editando && editando.extratoArquivo ? `<div style="font-size:11px;color:var(--gray-500);margin-top:4px;">📎 Atual: ${escapeHtml(editando.extratoArquivo)}</div>` : ''}
+        </div>
+
+        <div class="form-group full-width" style="flex-direction:row;gap:12px;margin-top:4px;">
+          <button class="btn btn-primary" style="height:42px;" onclick="adicionarContratada()">${editando ? '💾 Salvar' : '+ Adicionar'}</button>
+          ${editando ? `<button class="btn btn-secondary" style="height:42px;" onclick="cancelarEdicaoContratada()">Cancelar</button>` : ''}
         </div>
       </div>
     </div>
