@@ -4929,17 +4929,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
     y = gy0 + gh + 14;
   }
 
-  // ==================== SUMÁRIO (ÍNDICE) ====================
-  // Reserva uma página em branco aqui (logo após a visão geral) e só a
-  // preenche no final, quando já sabemos em que página cada seção caiu —
-  // assim o índice fica no lugar certo (início do relatório) mesmo com
-  // conteúdo de tamanho variável pela frente.
-  doc.addPage();
-  const paginaIndice = doc.internal.getCurrentPageInfo().pageNumber;
-  doc.addPage();
-  y = 20;
-  const secoesIndice = [];
-
   // Contratadas
   if (fin.contratadas && fin.contratadas.length > 0) {
     if (y > 240) { doc.addPage(); y = 20; }
@@ -4947,7 +4936,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Contratadas', M, y);
-    secoesIndice.push({ titulo: 'Contratadas', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     doc.autoTable({
@@ -4975,7 +4963,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('Aditivos Contratuais', M, y);
-      secoesIndice.push({ titulo: 'Aditivos Contratuais', pagina: doc.internal.getCurrentPageInfo().pageNumber });
       y += 6;
       doc.autoTable({
         head: [['Contratada', 'Aditivo', 'Tipo', 'Assinatura', 'Valor Aditivado', 'Nova Vigência']],
@@ -5005,7 +4992,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Pagamentos às Contratadas', M, y);
-    secoesIndice.push({ titulo: 'Pagamentos às Contratadas', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     const headers = [['Nº', 'Contratada', 'Data', 'Valor', 'Status', 'Documentos']];
@@ -5039,7 +5025,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
       doc.setFontSize(12);
       doc.setFont('helvetica', 'bold');
       doc.text('Histórico de Status dos Pagamentos', M, y);
-      secoesIndice.push({ titulo: 'Histórico de Status dos Pagamentos', pagina: doc.internal.getCurrentPageInfo().pageNumber });
       y += 6;
       doc.autoTable({
         head: [['Pagamento nº', 'Status', 'Quando']],
@@ -5062,7 +5047,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Extrato Bancário Mensal', M, y);
-    secoesIndice.push({ titulo: 'Extrato Bancário Mensal', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     const headers = [['Mês', 'Entradas', 'Saídas', 'Saldo do Mês']];
@@ -5088,7 +5072,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
     doc.text('Rendimentos', M, y);
-    secoesIndice.push({ titulo: 'Rendimentos', pagina: doc.internal.getCurrentPageInfo().pageNumber });
     y += 6;
 
     const headers = [['Mês', 'Aplicado', 'Rendimento']];
@@ -5103,45 +5086,6 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
       alternateRowStyles: { fillColor: [241, 245, 249] },
       margin: { left: M, right: M },
       theme: 'grid',
-    });
-  }
-
-  // ==================== PREENCHIMENTO DO SUMÁRIO ====================
-  // Volta para a página reservada lá no início e escreve o índice, já
-  // sabendo em que página cada seção efetivamente caiu.
-  doc.setPage(paginaIndice);
-  let ySum = 25;
-  doc.setTextColor(...NAVY);
-  doc.setFontSize(14);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Sumário', M, ySum);
-  ySum += 12;
-  doc.setFontSize(10.5);
-  if (secoesIndice.length === 0) {
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...GRAY);
-    doc.text('Este convênio não possui seções financeiras adicionais lançadas.', M, ySum);
-  } else {
-    secoesIndice.forEach(s => {
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(51, 65, 85);
-      const numPag = String(s.pagina);
-      const larguraPag = doc.getTextWidth(numPag);
-      const xTitulo = M;
-      const xPag = W - M;
-      doc.text(s.titulo, xTitulo, ySum);
-      doc.setTextColor(...GRAY);
-      doc.text(numPag, xPag, ySum, { align: 'right' });
-      // Linha pontilhada entre o título e o número da página
-      const xInicioPontos = xTitulo + doc.getTextWidth(s.titulo) + 2;
-      const xFimPontos = xPag - larguraPag - 2;
-      if (xFimPontos > xInicioPontos) {
-        doc.setLineDashPattern([0.5, 1.2], 0);
-        doc.setDrawColor(203, 213, 225);
-        doc.line(xInicioPontos, ySum - 1, xFimPontos, ySum - 1);
-        doc.setLineDashPattern([], 0);
-      }
-      ySum += 8;
     });
   }
 
