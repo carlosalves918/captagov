@@ -4352,7 +4352,7 @@ function renderProponenteForm() {
       <div class="form-group">
         <label class="form-label">Natureza</label>
         <select class="form-input form-select" id="pp_natureza">
-          <option>OSC</option><option>Consórcio Público</option><option>Empresa Privada</option><option>Pessoa Física</option><option>Prefeitura</option>
+          <option>OSC</option><option>Consórcio Público</option><option>Empresa Privada</option><option>Pessoa Física</option><option>Prefeitura</option><option>Fundo Municipal</option>
         </select>
       </div>
       <div class="form-group"><label class="form-label">CPF/CNPJ</label><input class="form-input" id="pp_documento" maxlength="18" oninput="mascararCNPJ(this)" placeholder="CPF ou CNPJ" /></div>
