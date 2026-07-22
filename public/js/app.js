@@ -629,6 +629,7 @@ function preencherComProponente(id) {
   const mapa = {
     c_conveniente: p.razaoSocial, c_cnpj: p.documento, c_cep: p.cep, c_logradouro: p.logradouro,
     c_bairro: p.bairro, c_municipio: p.municipio, c_estado: p.estado, c_telefone: p.telefone, c_email: p.email,
+    c_banco: p.banco, c_agencia: p.agencia, c_conta: p.conta,
   };
   Object.entries(mapa).forEach(([campo, valor]) => {
     const el = document.getElementById(campo);
@@ -643,6 +644,7 @@ function preencherComProponente(id) {
 const camposConvenio = [
   'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
   'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_estado', 'c_telefone', 'c_email',
+  'c_banco', 'c_agencia', 'c_conta',
   'c_valor', 'c_contrapartida', 'c_origem_recurso',
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
@@ -717,6 +719,7 @@ function editarConvenio(id) {
       c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
       c_bairro: c.bairroProp, c_municipio: c.municipioProp, c_estado: c.estadoProp,
       c_telefone: c.telefoneInst, c_email: c.emailInst,
+      c_banco: c.banco, c_agencia: c.agencia, c_conta: c.conta,
       c_valor: c.valor,
       c_contrapartida: c.contrapartida, c_origem_recurso: c.origemRecurso || '',
       c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
@@ -784,6 +787,7 @@ function salvarConvenio() {
     cnpj: form.c_cnpj, cep: form.c_cep, logradouro: form.c_logradouro,
     bairroProp: form.c_bairro, municipioProp: form.c_municipio, estadoProp: form.c_estado,
     telefoneInst: form.c_telefone, emailInst: form.c_email,
+    banco: form.c_banco, agencia: form.c_agencia, conta: form.c_conta,
     valor: form.c_valor, contrapartida: form.c_contrapartida, origemRecurso: form.c_origem_recurso || null,
     dataAssinatura: form.c_data_assinatura, dataInicio, dataFim, dataFimOriginal: dataFim,
     prazoPC: form.c_prazo_pc, prazoLimitePC,
@@ -1065,7 +1069,7 @@ function editarProponente(id) {
   // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
   requestAnimationFrame(() => {
     ['pp_razaoSocial', 'pp_natureza', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro',
-      'pp_municipio', 'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta',
+      'pp_municipio', 'pp_estado', 'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta',
       'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
     ].forEach(k => {
       const el = document.getElementById(k);
@@ -1098,6 +1102,7 @@ function salvarProponente() {
     logradouro: document.getElementById('pp_logradouro')?.value || '',
     bairro: document.getElementById('pp_bairro')?.value || '',
     municipio: document.getElementById('pp_municipio')?.value || '',
+    estado: document.getElementById('pp_estado')?.value || '',
     telefone: document.getElementById('pp_telefone')?.value || '',
     email: document.getElementById('pp_email')?.value || '',
     banco: document.getElementById('pp_banco')?.value || '',
@@ -2524,6 +2529,20 @@ function renderCadastro() {
         <div class="form-group">
           <label class="form-label">E-mail</label>
           <input class="form-input" type="email" id="c_email" />
+        </div>
+
+        <div class="form-section-title">🏦 Dados Bancários</div>
+        <div class="form-group">
+          <label class="form-label">Banco</label>
+          <input class="form-input" type="text" id="c_banco" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Agência</label>
+          <input class="form-input" type="text" id="c_agencia" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Conta</label>
+          <input class="form-input" type="text" id="c_conta" />
         </div>
 
         <div class="form-section-title">💰 Dados Financeiros</div>
@@ -4363,6 +4382,21 @@ function renderProponenteForm() {
       <div class="form-group"><label class="form-label">Logradouro</label><input class="form-input" id="pp_logradouro" /></div>
       <div class="form-group"><label class="form-label">Bairro</label><input class="form-input" id="pp_bairro" /></div>
       <div class="form-group"><label class="form-label">Município</label><input class="form-input" id="pp_municipio" /></div>
+      <div class="form-group">
+        <label class="form-label">Estado</label>
+        <select class="form-input form-select" id="pp_estado">
+          <option value="">— selecionar —</option>
+          <option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option>
+          <option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option>
+          <option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option>
+          <option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option>
+          <option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option>
+          <option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option>
+          <option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option>
+          <option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option>
+          <option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option>
+        </select>
+      </div>
       <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="pp_telefone" /></div>
       <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="pp_email" type="email" /></div>
 
@@ -4386,7 +4420,7 @@ function renderProponenteForm() {
 }
 
 function limparFormProponente() {
-  ['pp_razaoSocial', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro', 'pp_municipio',
+  ['pp_razaoSocial', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro', 'pp_municipio', 'pp_estado',
     'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta', 'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
   ].forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
   const nota = document.getElementById('proponenteNote');
