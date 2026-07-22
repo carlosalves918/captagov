@@ -892,13 +892,16 @@ function editarEmenda(id) {
   STATE.view = 'emendas';
   STATE.subView = 'form';
   renderTudo();
-  // O formulário só existe no DOM após o render acima
-  ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_situacao', 'em_esfera', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
-    const el = document.getElementById(k);
-    if (el) el.value = e[k.replace('em_', '')] || '';
+  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
+  // antes de preencher os campos (senão fica tudo em branco).
+  requestAnimationFrame(() => {
+    ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_situacao', 'em_esfera', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
+      const el = document.getElementById(k);
+      if (el) el.value = e[k.replace('em_', '')] || '';
+    });
+    const convSel = document.getElementById('em_convenio');
+    if (convSel) convSel.value = e.convenioId || '';
   });
-  const convSel = document.getElementById('em_convenio');
-  if (convSel) convSel.value = e.convenioId || '';
 }
 
 function salvarEmenda() {
@@ -980,11 +983,15 @@ function editarInstituicao(id) {
   STATE.view = 'instituicoes';
   STATE.subView = 'form';
   renderTudo();
-  ['in_razaoSocial', 'in_nomeFantasia', 'in_cnpj', 'in_esfera', 'in_cep', 'in_logradouro',
-    'in_bairro', 'in_municipio', 'in_telefone', 'in_email', 'in_repNome', 'in_repCargo', 'in_repCpf', 'in_obs',
-  ].forEach(k => {
-    const el = document.getElementById(k);
-    if (el) el.value = i[k.replace('in_', '')] || '';
+  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
+  // antes de preencher os campos (senão fica tudo em branco).
+  requestAnimationFrame(() => {
+    ['in_razaoSocial', 'in_nomeFantasia', 'in_cnpj', 'in_esfera', 'in_cep', 'in_logradouro',
+      'in_bairro', 'in_municipio', 'in_telefone', 'in_email', 'in_repNome', 'in_repCargo', 'in_repCpf', 'in_obs',
+    ].forEach(k => {
+      const el = document.getElementById(k);
+      if (el) el.value = i[k.replace('in_', '')] || '';
+    });
   });
 }
 
