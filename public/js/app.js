@@ -628,8 +628,7 @@ function preencherComProponente(id) {
   STATE.convenioProponenteIdSelecionada = id;
   const mapa = {
     c_conveniente: p.razaoSocial, c_cnpj: p.documento, c_cep: p.cep, c_logradouro: p.logradouro,
-    c_bairro: p.bairro, c_municipio: p.municipio, c_telefone: p.telefone, c_email: p.email,
-    c_banco: p.banco, c_agencia: p.agencia, c_conta: p.conta,
+    c_bairro: p.bairro, c_municipio: p.municipio, c_estado: p.estado, c_telefone: p.telefone, c_email: p.email,
   };
   Object.entries(mapa).forEach(([campo, valor]) => {
     const el = document.getElementById(campo);
@@ -643,8 +642,8 @@ function preencherComProponente(id) {
 // ==================== CRUD CONVÊNIOS ====================
 const camposConvenio = [
   'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
-  'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_telefone', 'c_email',
-  'c_banco', 'c_agencia', 'c_conta', 'c_valor', 'c_contrapartida', 'c_origem_recurso',
+  'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_estado', 'c_telefone', 'c_email',
+  'c_valor', 'c_contrapartida', 'c_origem_recurso',
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
 
@@ -716,9 +715,9 @@ function editarConvenio(id) {
       c_esfera: esferaNormalizada, c_natureza: c.natureza,
       c_conveniente: c.conveniente || c.proponente,
       c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
-      c_bairro: c.bairroProp, c_municipio: c.municipioProp,
+      c_bairro: c.bairroProp, c_municipio: c.municipioProp, c_estado: c.estadoProp,
       c_telefone: c.telefoneInst, c_email: c.emailInst,
-      c_banco: c.banco, c_agencia: c.agencia, c_conta: c.conta, c_valor: c.valor,
+      c_valor: c.valor,
       c_contrapartida: c.contrapartida, c_origem_recurso: c.origemRecurso || '',
       c_data_assinatura: c.dataAssinatura, c_data_inicio: c.dataInicio,
       c_data_fim: c.dataFim, c_prazo_pc: c.prazoPC || '60',
@@ -783,9 +782,8 @@ function salvarConvenio() {
     numero: form.c_numero, programa: form.c_programa, orgao: form.c_orgao,
     esfera: form.c_esfera, natureza: form.c_natureza, conveniente: form.c_conveniente,
     cnpj: form.c_cnpj, cep: form.c_cep, logradouro: form.c_logradouro,
-    bairroProp: form.c_bairro, municipioProp: form.c_municipio,
+    bairroProp: form.c_bairro, municipioProp: form.c_municipio, estadoProp: form.c_estado,
     telefoneInst: form.c_telefone, emailInst: form.c_email,
-    banco: form.c_banco, agencia: form.c_agencia, conta: form.c_conta,
     valor: form.c_valor, contrapartida: form.c_contrapartida, origemRecurso: form.c_origem_recurso || null,
     dataAssinatura: form.c_data_assinatura, dataInicio, dataFim, dataFimOriginal: dataFim,
     prazoPC: form.c_prazo_pc, prazoLimitePC,
@@ -2505,6 +2503,21 @@ function renderCadastro() {
           <input class="form-input" type="text" id="c_municipio" />
         </div>
         <div class="form-group">
+          <label class="form-label">Estado</label>
+          <select class="form-input form-select" id="c_estado">
+            <option value="">— selecionar —</option>
+            <option value="AC">AC</option><option value="AL">AL</option><option value="AP">AP</option>
+            <option value="AM">AM</option><option value="BA">BA</option><option value="CE">CE</option>
+            <option value="DF">DF</option><option value="ES">ES</option><option value="GO">GO</option>
+            <option value="MA">MA</option><option value="MT">MT</option><option value="MS">MS</option>
+            <option value="MG">MG</option><option value="PA">PA</option><option value="PB">PB</option>
+            <option value="PR">PR</option><option value="PE">PE</option><option value="PI">PI</option>
+            <option value="RJ">RJ</option><option value="RN">RN</option><option value="RS">RS</option>
+            <option value="RO">RO</option><option value="RR">RR</option><option value="SC">SC</option>
+            <option value="SP">SP</option><option value="SE">SE</option><option value="TO">TO</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label class="form-label">Telefone</label>
           <input class="form-input" type="text" id="c_telefone" />
         </div>
@@ -2514,18 +2527,6 @@ function renderCadastro() {
         </div>
 
         <div class="form-section-title">💰 Dados Financeiros</div>
-        <div class="form-group">
-          <label class="form-label">Banco</label>
-          <input class="form-input" type="text" id="c_banco" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Agência</label>
-          <input class="form-input" type="text" id="c_agencia" />
-        </div>
-        <div class="form-group">
-          <label class="form-label">Conta</label>
-          <input class="form-input" type="text" id="c_conta" />
-        </div>
         <div class="form-group">
           <label class="form-label">Repasse (R$) <span class="required">*</span></label>
           <input class="form-input" type="text" id="c_valor" oninput="mascararValor(this)" inputmode="numeric" />
@@ -5128,13 +5129,13 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
   doc.setTextColor(51, 65, 85);
   const linhasCadastro = [
     'Órgão: ' + (c.orgao || '—') + '   |   Esfera: ' + (c.esfera || '—') + '   |   Natureza: ' + (c.natureza || '—'),
-    'CNPJ: ' + (c.cnpj || '—') + '   |   Endereço: ' + (c.logradouro || '—') + ', ' + (c.bairroProp || '—') + ' — ' + (c.municipioProp || '—'),
+    'CNPJ: ' + (c.cnpj || '—') + '   |   Endereço: ' + (c.logradouro || '—') + ', ' + (c.bairroProp || '—') + ' — ' + (c.municipioProp || '—') + (c.estadoProp ? '/' + c.estadoProp : ''),
     'Contato institucional: ' + (c.telefoneInst || '—') + '   |   ' + (c.emailInst || '—'),
     (c.responsavel || c.cargo || c.responsavelCpf) ? 'Responsável: ' + (c.responsavel || '—') + ' (' + (c.cargo || '—') + ')   |   CPF: ' + (c.responsavelCpf || '—') : null,
     (c.responsavelTelefone || c.responsavelEmail) ? 'Contato do responsável: ' + (c.responsavelTelefone || '—') + '   |   ' + (c.responsavelEmail || '—') : null,
     (c.tecnicoNome || c.tecnicoRegistro) ? 'Técnico responsável: ' + (c.tecnicoNome || '—') + '   |   Registro: ' + (c.tecnicoRegistro || '—') : null,
     (c.tecnicoTelefone || c.tecnicoEmail) ? 'Contato do técnico: ' + (c.tecnicoTelefone || '—') + '   |   ' + (c.tecnicoEmail || '—') : null,
-    'Banco/Agência/Conta: ' + (c.banco || '—') + ' / ' + (c.agencia || '—') + ' / ' + (c.conta || '—') + '   |   Contrapartida: ' + (c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : '—'),
+    'Contrapartida: ' + (c.contrapartida ? formatMoeda(parseMoeda(c.contrapartida)) : '—'),
     'Assinatura: ' + (c.dataAssinatura || '—') + '   |   Vigência: ' + (c.dataInicio || '—') + ' a ' + (c.dataFim || '—') + '   |   PC até: ' + (c.prazoLimitePC || '—'),
   ].filter(Boolean);
   linhasCadastro.forEach(linha => { doc.text(linha, M, y); y += 5; });
