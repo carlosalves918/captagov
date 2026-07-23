@@ -590,6 +590,14 @@ function mudarView(view) {
     toastAviso('Essa área é restrita a administradores.');
     return;
   }
+  // O convênio "atual" só faz sentido dentro das telas que trabalham em cima
+  // dele (Cadastro, Prestação de Contas, Documentos, Relatórios). Ao navegar
+  // para qualquer outra área (Painel Geral, Cadastros de Apoio, Administração),
+  // ele é desselecionado — senão fica "preso" selecionado e confunde o usuário.
+  const telasComConvenioAtivo = ['cadastro', 'prestacao', 'documentos', 'relatorios'];
+  if (!telasComConvenioAtivo.includes(view)) {
+    STATE.convenioAtualId = null;
+  }
   STATE.view = view;
   if (view === 'prestacao') STATE.subView = 'contratadas';
   else if (view === 'documentos') STATE.docSubView = 'ia';
