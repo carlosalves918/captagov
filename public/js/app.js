@@ -902,7 +902,13 @@ function editarEmenda(id) {
   });
   const convSel = document.getElementById('em_convenio');
   if (convSel) convSel.value = e.convenioId || '';
-  renderTudo();
+  // NÃO chamar renderTudo() aqui: isso dispara o re-render assíncrono do React
+  // (via evento captagov:changed), que reconstrói o #mainBody de novo — mas
+  // com o template do formulário em branco (o HTML não embute os valores,
+  // eles são preenchidos por JS logo acima). O resultado seria apagar os
+  // valores que acabamos de preencher, um instante depois. Como já
+  // desenhamos e preenchemos o formulário de forma síncrona, não há nada
+  // pendente pro React atualizar.
 }
 
 function salvarEmenda() {
@@ -991,7 +997,7 @@ function editarInstituicao(id) {
     const el = document.getElementById(k);
     if (el) el.value = i[k.replace('in_', '')] || '';
   });
-  renderTudo();
+  // Sem renderTudo() aqui — ver comentário em editarEmenda.
 }
 
 function salvarInstituicao() {
@@ -1080,7 +1086,7 @@ function editarProponente(id) {
     const el = document.getElementById(k);
     if (el) el.value = p[k.replace('pp_', '')] || '';
   });
-  renderTudo();
+  // Sem renderTudo() aqui — ver comentário em editarEmenda.
 }
 
 function salvarProponente() {
@@ -1294,7 +1300,7 @@ function editarResponsavelTecnico(id) {
     const el = document.getElementById(k);
     if (el) el.value = r[k.replace('rt_', '')] || '';
   });
-  renderTudo();
+  // Sem renderTudo() aqui — ver comentário em editarEmenda.
 }
 
 function salvarResponsavelTecnico() {
