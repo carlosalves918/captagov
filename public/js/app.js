@@ -629,7 +629,6 @@ function preencherComProponente(id) {
   const mapa = {
     c_conveniente: p.razaoSocial, c_cnpj: p.documento, c_cep: p.cep, c_logradouro: p.logradouro,
     c_bairro: p.bairro, c_municipio: p.municipio, c_estado: p.estado, c_telefone: p.telefone, c_email: p.email,
-    c_banco: p.banco, c_agencia: p.agencia, c_conta: p.conta,
   };
   Object.entries(mapa).forEach(([campo, valor]) => {
     const el = document.getElementById(campo);
@@ -891,17 +890,19 @@ function editarEmenda(id) {
   STATE.emTipoAtual = e.tipo || 'Convênio';
   STATE.view = 'emendas';
   STATE.subView = 'form';
-  renderTudo();
-  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
-  // antes de preencher os campos (senão fica tudo em branco).
-  requestAnimationFrame(() => {
-    ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_situacao', 'em_esfera', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
-      const el = document.getElementById(k);
-      if (el) el.value = e[k.replace('em_', '')] || '';
-    });
-    const convSel = document.getElementById('em_convenio');
-    if (convSel) convSel.value = e.convenioId || '';
+  // Desenha o formulário JÁ, na mesma call stack (não espera o ciclo assíncrono
+  // do React) — assim os campos existem no DOM antes de tentarmos preenchê-los.
+  // Antes, isso dependia de requestAnimationFrame + o tick do React, que podia
+  // rodar ANTES do formulário existir: os campos ficavam em branco e, ao salvar,
+  // apagavam os dados antigos (era isso que causava a "não persistência").
+  renderBody();
+  ['em_parlamentar', 'em_partido', 'em_numero', 'em_ano', 'em_valor', 'em_orgao', 'em_objeto', 'em_situacao', 'em_esfera', 'em_obs', 'em_conveniente_nome', 'em_conveniente_cnpj'].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = e[k.replace('em_', '')] || '';
   });
+  const convSel = document.getElementById('em_convenio');
+  if (convSel) convSel.value = e.convenioId || '';
+  renderTudo();
 }
 
 function salvarEmenda() {
@@ -982,17 +983,15 @@ function editarInstituicao(id) {
   STATE.instituicaoEditandoId = id;
   STATE.view = 'instituicoes';
   STATE.subView = 'form';
-  renderTudo();
-  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
-  // antes de preencher os campos (senão fica tudo em branco).
-  requestAnimationFrame(() => {
-    ['in_razaoSocial', 'in_nomeFantasia', 'in_cnpj', 'in_esfera', 'in_cep', 'in_logradouro',
-      'in_bairro', 'in_municipio', 'in_telefone', 'in_email', 'in_repNome', 'in_repCargo', 'in_repCpf', 'in_obs',
-    ].forEach(k => {
-      const el = document.getElementById(k);
-      if (el) el.value = i[k.replace('in_', '')] || '';
-    });
+  // Desenha o formulário já, na mesma call stack (ver comentário em editarEmenda).
+  renderBody();
+  ['in_razaoSocial', 'in_nomeFantasia', 'in_cnpj', 'in_esfera', 'in_cep', 'in_logradouro',
+    'in_bairro', 'in_municipio', 'in_telefone', 'in_email', 'in_repNome', 'in_repCargo', 'in_repCpf', 'in_obs',
+  ].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = i[k.replace('in_', '')] || '';
   });
+  renderTudo();
 }
 
 function salvarInstituicao() {
@@ -1072,17 +1071,16 @@ function editarProponente(id) {
   STATE.proponenteEditandoId = id;
   STATE.view = 'proponentes';
   STATE.subView = 'form';
-  renderTudo();
-  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
-  requestAnimationFrame(() => {
-    ['pp_razaoSocial', 'pp_natureza', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro',
-      'pp_municipio', 'pp_estado', 'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta',
-      'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
-    ].forEach(k => {
-      const el = document.getElementById(k);
-      if (el) el.value = p[k.replace('pp_', '')] || '';
-    });
+  // Desenha o formulário já, na mesma call stack (ver comentário em editarEmenda).
+  renderBody();
+  ['pp_razaoSocial', 'pp_natureza', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro',
+    'pp_municipio', 'pp_estado', 'pp_telefone', 'pp_email',
+    'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
+  ].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = p[k.replace('pp_', '')] || '';
   });
+  renderTudo();
 }
 
 function salvarProponente() {
@@ -1112,9 +1110,6 @@ function salvarProponente() {
     estado: document.getElementById('pp_estado')?.value || '',
     telefone: document.getElementById('pp_telefone')?.value || '',
     email: document.getElementById('pp_email')?.value || '',
-    banco: document.getElementById('pp_banco')?.value || '',
-    agencia: document.getElementById('pp_agencia')?.value || '',
-    conta: document.getElementById('pp_conta')?.value || '',
     repNome: document.getElementById('pp_repNome')?.value || '',
     repCargo: document.getElementById('pp_repCargo')?.value || '',
     repCpf: document.getElementById('pp_repCpf')?.value || '',
@@ -1293,14 +1288,13 @@ function editarResponsavelTecnico(id) {
   STATE.responsavelTecnicoEditandoId = id;
   STATE.view = 'responsaveisTecnicos';
   STATE.subView = 'form';
-  renderTudo();
-  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
-  requestAnimationFrame(() => {
-    ['rt_nome', 'rt_cargo', 'rt_conselho', 'rt_numeroRegistro', 'rt_cpf', 'rt_telefone', 'rt_email', 'rt_obs'].forEach(k => {
-      const el = document.getElementById(k);
-      if (el) el.value = r[k.replace('rt_', '')] || '';
-    });
+  // Desenha o formulário já, na mesma call stack (ver comentário em editarEmenda).
+  renderBody();
+  ['rt_nome', 'rt_cargo', 'rt_conselho', 'rt_numeroRegistro', 'rt_cpf', 'rt_telefone', 'rt_email', 'rt_obs'].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = r[k.replace('rt_', '')] || '';
   });
+  renderTudo();
 }
 
 function salvarResponsavelTecnico() {
@@ -4407,11 +4401,6 @@ function renderProponenteForm() {
       <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="pp_telefone" /></div>
       <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="pp_email" type="email" /></div>
 
-      <div class="form-section-title">🏦 Dados Bancários</div>
-      <div class="form-group"><label class="form-label">Banco</label><input class="form-input" id="pp_banco" /></div>
-      <div class="form-group"><label class="form-label">Agência</label><input class="form-input" id="pp_agencia" /></div>
-      <div class="form-group"><label class="form-label">Conta</label><input class="form-input" id="pp_conta" /></div>
-
       <div class="form-section-title">👤 Representante Legal</div>
       <div class="form-group"><label class="form-label">Nome</label><input class="form-input" id="pp_repNome" /></div>
       <div class="form-group"><label class="form-label">Cargo</label><input class="form-input" id="pp_repCargo" /></div>
@@ -4428,7 +4417,7 @@ function renderProponenteForm() {
 
 function limparFormProponente() {
   ['pp_razaoSocial', 'pp_documento', 'pp_cep', 'pp_logradouro', 'pp_bairro', 'pp_municipio', 'pp_estado',
-    'pp_telefone', 'pp_email', 'pp_banco', 'pp_agencia', 'pp_conta', 'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
+    'pp_telefone', 'pp_email', 'pp_repNome', 'pp_repCargo', 'pp_repCpf', 'pp_obs',
   ].forEach(k => { const el = document.getElementById(k); if (el) el.value = ''; });
   const nota = document.getElementById('proponenteNote');
   if (nota) nota.innerHTML = '';
