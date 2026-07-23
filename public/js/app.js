@@ -880,7 +880,7 @@ function abrirAditivoDireto(convenioId, contratadaId) {
 function novaEmenda() {
   STATE.emendaEditandoId = null;
   limparFormEmenda();
-  mudarView('emendas');
+  mudarSubView('form');
 }
 
 function editarEmenda(id) {
