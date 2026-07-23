@@ -1745,12 +1745,13 @@ function renderPagamentoDocsContainer(pagamentoId) {
   const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
   if (!pg) return;
   if (!pg.docs) pg.docs = docsVaziosPagamento();
+  const categoriasDoc = getCategoriasDocPagamento(c.tipoEmenda);
 
   container.innerHTML = `
     <div style="margin-top:12px;padding:16px;background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);">
       <div style="font-size:13px;color:var(--gray-600);margin-bottom:12px;font-weight:600;">Checklist de Documentos — Pagamento nº ${pg.numero}</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
-        ${CATEGORIAS_DOC_PAGAMENTO.map(cat => {
+        ${categoriasDoc.map(cat => {
           const item = pg.docs[cat.id] || { anexado: false, arquivo: null, arquivoDataUrl: null };
           return `
             <div style="background:var(--white);border:1px solid ${item.anexado ? 'var(--green-300)' : 'var(--gray-200)'};border-radius:var(--radius-sm);padding:10px 12px;">
@@ -1808,7 +1809,7 @@ function removerDocPagamento(pagamentoId, catId) {
   if (!c) return;
   const pg = (c.financeiro.pagamentos || []).find(p => p.id === pagamentoId);
   if (!pg || !pg.docs || !pg.docs[catId]) return;
-  const cat = CATEGORIAS_DOC_PAGAMENTO.find(x => x.id === catId);
+  const cat = getCategoriasDocPagamento(c.tipoEmenda).find(x => x.id === catId);
   if (!confirm('Remover o anexo "' + (cat ? cat.nome : catId) + '" deste pagamento?')) return;
   pg.docs[catId] = { anexado: false, arquivo: null, arquivoDataUrl: null };
   salvarEstado();
@@ -1995,6 +1996,28 @@ const CATEGORIAS_DOC_PAGAMENTO = [
   { id: 'tributos', nome: 'Quitação de Tributos' },
 ];
 
+// Ajusta o checklist de documentos do pagamento conforme o tipo de emenda/objeto
+// do convênio (c.tipoEmenda: 'obra' | 'equipamentos' | 'custeio'):
+//  - obra: o item "Medição ou Ordem de Compra" vira apenas "Medição"; mantém os demais.
+//  - equipamentos: o item de medição vira "Ordem de Compra"; remove "Memória de Cálculo".
+//  - custeio: o item de medição vira "Ordem de Serviço"; remove "Memória de Cálculo".
+//  - sem tipo definido: mantém a lista padrão (comportamento original).
+function getCategoriasDocPagamento(tipoEmenda) {
+  let categorias = CATEGORIAS_DOC_PAGAMENTO;
+  if (tipoEmenda === 'obra') {
+    categorias = categorias.map(cat => cat.id === 'medicao' ? { ...cat, nome: 'Medição' } : cat);
+  } else if (tipoEmenda === 'equipamentos') {
+    categorias = categorias
+      .map(cat => cat.id === 'medicao' ? { ...cat, nome: 'Ordem de Compra' } : cat)
+      .filter(cat => cat.id !== 'memoria');
+  } else if (tipoEmenda === 'custeio') {
+    categorias = categorias
+      .map(cat => cat.id === 'medicao' ? { ...cat, nome: 'Ordem de Serviço' } : cat)
+      .filter(cat => cat.id !== 'memoria');
+  }
+  return categorias;
+}
+
 function docsVaziosPagamento() {
   const est = {};
   CATEGORIAS_DOC_PAGAMENTO.forEach(c => { est[c.id] = { anexado: false, arquivo: null, arquivoDataUrl: null }; });
@@ -2172,7 +2195,7 @@ async function exportarAnexosZIP() {
       }
     });
     // Checklist de documentos por categoria do pagamento
-    CATEGORIAS_DOC_PAGAMENTO.forEach(cat => {
+    getCategoriasDocPagamento(c.tipoEmenda).forEach(cat => {
       const item = pg.docs && pg.docs[cat.id];
       if (item && item.anexado && item.arquivoDataUrl) {
         const base64 = item.arquivoDataUrl.split(',')[1];
@@ -3127,8 +3150,9 @@ function renderPagamentos(c, resumo) {
               const ct = contratadas.find(x => x.id === p.contratadaId);
               const saldoCt = calcularSaldoContratada(c, p.contratadaId);
               const docsObj = p.docs || {};
-              const docsTotal = CATEGORIAS_DOC_PAGAMENTO.length;
-              const docsAnexados = CATEGORIAS_DOC_PAGAMENTO.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
+              const categoriasDocP = getCategoriasDocPagamento(c.tipoEmenda);
+              const docsTotal = categoriasDocP.length;
+              const docsAnexados = categoriasDocP.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
               return `<tr>
                 <td>${p.numero}</td>
                 <td>${escapeHtml(ct ? ct.razaoSocial : '?')}</td>
@@ -5347,8 +5371,9 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
     const rows = fin.pagamentos.map(p => {
       const ct = (fin.contratadas || []).find(x => x.id === p.contratadaId);
       const docsObj = p.docs || {};
-      const docsAnexados = CATEGORIAS_DOC_PAGAMENTO.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
-      return [String(p.numero), ct ? ct.razaoSocial : '?', p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—', formatMoeda(p.valor), p.status, docsAnexados + '/' + CATEGORIAS_DOC_PAGAMENTO.length];
+      const categoriasDocP = getCategoriasDocPagamento(c.tipoEmenda);
+      const docsAnexados = categoriasDocP.filter(cat => docsObj[cat.id] && docsObj[cat.id].anexado).length;
+      return [String(p.numero), ct ? ct.razaoSocial : '?', p.data ? new Date(p.data + 'T00:00:00').toLocaleDateString('pt-BR') : '—', formatMoeda(p.valor), p.status, docsAnexados + '/' + categoriasDocP.length];
     });
 
     doc.autoTable({
@@ -5506,7 +5531,7 @@ async function gerarPDFRelatorioCompleto() {
     (pg.anexos || []).forEach(a => {
       if (a.dataUrl) itens.push({ secao: 'Pagamentos', titulo: 'Pagamento nº ' + pg.numero, subtitulo: subBase + ' — ' + (a.nome || 'anexo'), dataUrl: a.dataUrl, nomeArquivo: a.nome });
     });
-    CATEGORIAS_DOC_PAGAMENTO.forEach(cat => {
+    getCategoriasDocPagamento(c.tipoEmenda).forEach(cat => {
       const item = pg.docs && pg.docs[cat.id];
       if (item && item.anexado && item.arquivoDataUrl) {
         itens.push({ secao: 'Pagamentos', titulo: 'Pagamento nº ' + pg.numero, subtitulo: subBase + ' — ' + cat.nome, dataUrl: item.arquivoDataUrl, nomeArquivo: item.arquivo });
