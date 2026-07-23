@@ -35,9 +35,10 @@ const GRUPOS = [
 ];
 
 export default function Sidebar({ onNavigate }) {
-  const { state, mudarView, exportarDados, importarDados, abrirTelaBackups, papelAtual, usuarioAtual, algumUsuarioTemSenha, fazerLogout } = useApp();
+  const { state, mudarView, exportarDados, importarDados, abrirTelaBackups, papelAtual, podeGerenciarBackups, usuarioAtual, algumUsuarioTemSenha, fazerLogout } = useApp();
   const viewAtual = state?.view;
   const ehAdmin = papelAtual() === 'admin';
+  const podeBackup = podeGerenciarBackups();
   const loginAtivo = algumUsuarioTemSenha();
   const logado = usuarioAtual();
   const PAPEL_LABEL = { admin: 'Administrador', operador: 'Operador', leitura: 'Somente leitura' };
@@ -107,7 +108,7 @@ export default function Sidebar({ onNavigate }) {
             </button>
           </div>
         )}
-        {ehAdmin && (
+        {podeBackup && (
         <div style={{ marginBottom: 8 }}>
           <button
             type="button"

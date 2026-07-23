@@ -71,6 +71,7 @@ export function AppProvider({ children }) {
     usuarioAtual: call('usuarioAtual'),
     papelAtual: call('papelAtual'),
     podeAdministrar: call('podeAdministrar'),
+    podeGerenciarBackups: call('podeGerenciarBackups'),
   }), [call]);
 
   const value = useMemo(() => ({

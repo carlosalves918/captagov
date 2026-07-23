@@ -576,8 +576,10 @@ async function carregarEstado() {
 // restrita a admin e o usuário atual não for admin, volta pro Painel Geral
 // em vez de deixar uma tela vazia/bloqueada logo na abertura.
 function validarViewRestaurada() {
-  const somenteAdmin = ['usuarios', 'identidadeVisual', 'backups'];
-  if (somenteAdmin.includes(STATE.view) && !podeAdministrar()) {
+  const somenteAdmin = ['usuarios', 'identidadeVisual'];
+  const bloqueadaPorAdmin = somenteAdmin.includes(STATE.view) && !podeAdministrar();
+  const bloqueadaPorBackup = STATE.view === 'backups' && !podeGerenciarBackups();
+  if (bloqueadaPorAdmin || bloqueadaPorBackup) {
     STATE.view = 'painel';
     STATE.subView = 'contratadas';
   }
@@ -585,9 +587,13 @@ function validarViewRestaurada() {
 
 // ==================== NAVEGAÇÃO ====================
 function mudarView(view) {
-  const somenteAdmin = ['usuarios', 'identidadeVisual', 'backups'];
+  const somenteAdmin = ['usuarios', 'identidadeVisual'];
   if (somenteAdmin.includes(view) && !podeAdministrar()) {
     toastAviso('Essa área é restrita a administradores.');
+    return;
+  }
+  if (view === 'backups' && !podeGerenciarBackups()) {
+    toastAviso('Essa área é restrita a administradores e operadores.');
     return;
   }
   // O convênio "atual" só faz sentido dentro das telas que trabalham em cima
@@ -1210,7 +1216,7 @@ async function verificarBackupAutomatico() {
 }
 
 async function abrirTelaBackups() {
-  if (!podeAdministrar()) { toastAviso('Essa área é restrita a administradores.'); return; }
+  if (!podeGerenciarBackups()) { toastAviso('Essa área é restrita a administradores e operadores.'); return; }
   try {
     STATE.backupsAutoLista = await listarSnapshotsAutoDb();
   } catch (e) {
@@ -1414,6 +1420,13 @@ function papelAtual() {
 
 function podeAdministrar() {
   return papelAtual() === PAPEIS.ADMIN;
+}
+
+// Backup/exportação/importação: admin sempre pode; operador também pode
+// (só quem é "somente leitura" fica de fora), pois isso não é uma ação
+// administrativa de configuração do sistema, e sim de proteção dos dados.
+function podeGerenciarBackups() {
+  return papelAtual() === PAPEIS.ADMIN || papelAtual() === PAPEIS.OPERADOR;
 }
 
 function podeEditar() {
@@ -5845,7 +5858,7 @@ Object.assign(window, {
   // Expostos para a ponte React (ver contexts/AppContext.jsx) — telas ainda não
   // migradas continuam usando essas funções por baixo dos panos.
   STATE, calcularResumoFinanceiro, statusConvenio, selecionarConvenio,
-  fazerLogin, fazerLogout, algumUsuarioTemSenha, usuarioAtual, papelAtual, podeAdministrar, PAPEL_LABEL,
+  fazerLogin, fazerLogout, algumUsuarioTemSenha, usuarioAtual, papelAtual, podeAdministrar, podeGerenciarBackups, PAPEL_LABEL,
 });
 
 // Avisa a ponte React (se já estiver montada) que window.STATE já existe,
