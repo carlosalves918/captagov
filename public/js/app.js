@@ -1458,16 +1458,15 @@ function editarUsuario(id) {
   STATE.usuarioEditandoId = id;
   STATE.view = 'usuarios';
   STATE.subView = 'form';
-  renderTudo();
-  // Aguarda o próximo tick do navegador para garantir que o formulário foi renderizado
-  requestAnimationFrame(() => {
-    ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs'].forEach(k => {
-      const el = document.getElementById(k);
-      if (el) el.value = u[k.replace('us_', '')] || '';
-    });
-    const papelEl = document.getElementById('us_papel');
-    if (papelEl) papelEl.value = u.papel || PAPEIS.OPERADOR;
+  // Desenha o formulário já, na mesma call stack (ver comentário em editarEmenda).
+  renderBody();
+  ['us_nome', 'us_cargo', 'us_setor', 'us_email', 'us_telefone', 'us_obs'].forEach(k => {
+    const el = document.getElementById(k);
+    if (el) el.value = u[k.replace('us_', '')] || '';
   });
+  const papelEl = document.getElementById('us_papel');
+  if (papelEl) papelEl.value = u.papel || PAPEIS.OPERADOR;
+  // Sem renderTudo() aqui — ver comentário em editarEmenda.
 }
 
 async function salvarUsuario() {
