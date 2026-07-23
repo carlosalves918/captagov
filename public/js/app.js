@@ -4124,7 +4124,7 @@ function renderEmendaLista() {
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Buscar emenda..." value="${escapeHtml(termo)}" id="emendaBusca" oninput="renderTudo()" />
         </div>
-        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Nova Emenda</button>
+        <button class="btn btn-primary" onclick="novaEmenda()">+ Nova Emenda</button>
       </div>
     </div>
     ${lista.length === 0
@@ -4253,7 +4253,7 @@ function renderInstituicaoLista() {
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Buscar instituição..." value="${escapeHtml(termo)}" id="instituicaoBusca" oninput="renderTudo()" />
         </div>
-        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Nova Instituição</button>
+        <button class="btn btn-primary" onclick="novaInstituicao()">+ Nova Instituição</button>
       </div>
     </div>
     ${lista.length === 0
@@ -4349,7 +4349,7 @@ function renderProponenteLista() {
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Buscar proponente..." value="${escapeHtml(termo)}" id="proponenteBusca" oninput="renderTudo()" />
         </div>
-        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Novo Proponente</button>
+        <button class="btn btn-primary" onclick="novaProponente()">+ Novo Proponente</button>
       </div>
     </div>
     ${lista.length === 0
@@ -4459,7 +4459,7 @@ function renderResponsavelTecnicoLista() {
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Buscar responsável técnico..." value="${escapeHtml(termo)}" id="responsavelTecnicoBusca" oninput="renderTudo()" />
         </div>
-        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Novo Responsável Técnico</button>
+        <button class="btn btn-primary" onclick="novoResponsavelTecnico()">+ Novo Responsável Técnico</button>
       </div>
     </div>
     ${lista.length === 0
@@ -4542,7 +4542,7 @@ function renderUsuarioLista() {
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Buscar usuário..." value="${escapeHtml(termo)}" id="usuarioBusca" oninput="renderTudo()" />
         </div>
-        <button class="btn btn-primary" onclick="mudarSubView('form')">+ Novo Usuário</button>
+        <button class="btn btn-primary" onclick="novoUsuario()">+ Novo Usuário</button>
       </div>
     </div>
     <div class="alert alert-info" style="margin-bottom:16px;">
@@ -5779,7 +5779,8 @@ Object.assign(window, {
   adicionarLinhaListaDoc, removerLinhaListaDoc, cancelarFormularioDocumento, finalizarFormularioDocumento,
   gerarPDFRelatorio, gerarPDFRelatorioCompleto, gerarPDFRelatorioGeral, importarDados, lancarExtrato, lancarRendimento,
   mascararCEP, mascararCNPJ, mascararCPF, mascararValor, mudarSubView,
-  mudarTipoEmenda, mudarView, novoConvenio, preencherComInstituicao, preencherComProponente,
+  mudarTipoEmenda, mudarView, novoConvenio, novaEmenda, novaInstituicao, novaProponente,
+  novoResponsavelTecnico, novoUsuario, preencherComInstituicao, preencherComProponente,
   registrarPagamento,
   removerAditivo, removerAditivoConvenio, removerAnexoExtrato, removerAnexoRendimento, removerContratada,
   removerDocExtra, removerDocPagamento, removerDocumentoSalvo, removerExtrato, removerPagamento,
