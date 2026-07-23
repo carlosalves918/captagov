@@ -243,6 +243,11 @@ export default function PainelGeral() {
                     <span className={`badge ${c.tipo === 'projeto' ? 'badge-info' : 'badge-ok'}`}>
                       {c.tipo === 'projeto' ? 'Projeto' : 'Convênio'}
                     </span>{' '}
+                    {c.tipoEmenda && (
+                      <span className="badge badge-info" title="Tipo de Emenda" style={{ marginRight: 4 }}>
+                        {c.tipoEmenda === 'custeio' ? 'Custeio' : c.tipoEmenda === 'equipamentos' ? 'Equipamentos (Invest.)' : c.tipoEmenda === 'obra' ? 'Obra (Invest.)' : ''}
+                      </span>
+                    )}
                     {ativo && <span className="badge badge-ok" style={{ marginRight: 4 }}>● Selecionado</span>}
                     {c.numero || 'sem número'} — {c.programa || 'Sem programa'}
                   </div>

@@ -652,9 +652,16 @@ const camposConvenio = [
   'c_numero', 'c_programa', 'c_orgao', 'c_esfera', 'c_natureza', 'c_conveniente', 'c_cnpj',
   'c_cep', 'c_logradouro', 'c_bairro', 'c_municipio', 'c_estado', 'c_telefone', 'c_email',
   'c_banco', 'c_agencia', 'c_conta',
-  'c_valor', 'c_contrapartida', 'c_origem_recurso',
+  'c_valor', 'c_contrapartida', 'c_origem_recurso', 'c_tipo_emenda',
   'c_data_assinatura', 'c_data_inicio', 'c_data_fim', 'c_prazo_pc'
 ];
+
+// Rótulos amigáveis para o tipo de emenda parlamentar que financia o convênio.
+const TIPOS_EMENDA_CONVENIO = {
+  custeio: 'Custeio',
+  equipamentos: 'Equipamentos (Investimento)',
+  obra: 'Obra (Investimento)',
+};
 
 const obrigatoriosBase = ['c_numero', 'c_conveniente', 'c_valor'];
 const obrigatoriosConvenio = [...obrigatoriosBase, 'c_data_fim'];
@@ -721,6 +728,7 @@ function editarConvenio(id) {
   requestAnimationFrame(() => {
     setFormData({
       c_numero: c.numero, c_programa: c.programa, c_orgao: c.orgao,
+      c_tipo_emenda: c.tipoEmenda || '',
       c_esfera: esferaNormalizada, c_natureza: c.natureza,
       c_conveniente: c.conveniente || c.proponente,
       c_cnpj: c.cnpj, c_cep: c.cep, c_logradouro: c.logradouro,
@@ -790,6 +798,7 @@ function salvarConvenio() {
   const dados = {
     tipo: STATE.tipoInstrumento,
     numero: form.c_numero, programa: form.c_programa, orgao: form.c_orgao,
+    tipoEmenda: form.c_tipo_emenda || '',
     esfera: form.c_esfera, natureza: form.c_natureza, conveniente: form.c_conveniente,
     cnpj: form.c_cnpj, cep: form.c_cep, logradouro: form.c_logradouro,
     bairroProp: form.c_bairro, municipioProp: form.c_municipio, estadoProp: form.c_estado,
@@ -2451,6 +2460,15 @@ function renderCadastro() {
             <label class="form-label">Programa</label>
             <input class="form-input" type="text" id="c_programa" placeholder="Ex: Programa de Aceleração do Crescimento" />
           </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Tipo de Emenda</label>
+          <select class="form-input form-select" id="c_tipo_emenda">
+            <option value="">— selecionar —</option>
+            <option value="custeio">Custeio</option>
+            <option value="equipamentos">Equipamentos (Investimento)</option>
+            <option value="obra">Obra (Investimento)</option>
+          </select>
         </div>
         ${ehConvenio ? `
         <div class="form-section-title">🏛️ Proponente (Concedente do Recurso)</div>
@@ -5172,6 +5190,7 @@ async function construirPDFRelatorioFinanceiro(c, resumo) {
   doc.setTextColor(51, 65, 85);
   const linhasCadastro = [
     'Órgão: ' + (c.orgao || '—') + '   |   Esfera: ' + (c.esfera || '—') + '   |   Natureza: ' + (c.natureza || '—'),
+    'Tipo de Emenda: ' + (TIPOS_EMENDA_CONVENIO[c.tipoEmenda] || '—'),
     'CNPJ: ' + (c.cnpj || '—') + '   |   Endereço: ' + (c.logradouro || '—') + ', ' + (c.bairroProp || '—') + ' — ' + (c.municipioProp || '—') + (c.estadoProp ? '/' + c.estadoProp : ''),
     'Contato institucional: ' + (c.telefoneInst || '—') + '   |   ' + (c.emailInst || '—'),
     (c.responsavel || c.cargo || c.responsavelCpf) ? 'Responsável: ' + (c.responsavel || '—') + ' (' + (c.cargo || '—') + ')   |   CPF: ' + (c.responsavelCpf || '—') : null,
